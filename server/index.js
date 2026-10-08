@@ -122,3 +122,5 @@ app.listen(port, () => {
   console.log(`Order email API listening on port ${port}`)
   if (!createTransport()) console.warn('Gmail SMTP is not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD in .env.')
 })
+
+setInterval(() => {}, 1000 * 60 * 60)
