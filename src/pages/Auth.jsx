@@ -15,7 +15,9 @@ import {
   useAuthStatus,
 } from '../data/auth'
 import { byId, inr, products } from '../data/products'
-import { Wrap, Field, btnP, btnO, validate } from '../components/ui'
+import { Wrap, Field, Img, btnP, btnO, validate } from '../components/ui'
+import {CustomerReviews} from '../components/Reviews'
+import {ReviewSummary,ProductSalesSummary} from '../components/Rating'
 
 export function Login() {
   const navigate = useNavigate()
@@ -266,6 +268,7 @@ export function Account() {
   const session = useAuthStatus()
   const [tab, setTab] = useState('profile')
   const user = getDemoUser()
+  const myOrders=orders.filter(order=>(order.email||'').toLowerCase()===(session?.email||'').toLowerCase())
   const [profile, setProfile] = useState({ name: user.name, email: user.email, phone: user.phone, address: user.address })
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [status, setStatus] = useState('')
@@ -291,7 +294,7 @@ export function Account() {
   }
 
   const wishlistItems = wish.map(id => byId[id]).filter(Boolean)
-  const tabs = ['profile', 'orders', 'wishlist', 'security']
+  const tabs = ['profile', 'orders', 'wishlist', 'reviews', 'security']
 
   return (
     <Wrap className="py-10">
@@ -314,7 +317,7 @@ export function Account() {
               (tab === key ? 'bg-maroon text-ivory' : 'border border-gold/40 bg-white text-maroon')
             }
           >
-            {key === 'profile' ? 'Profile' : key === 'orders' ? 'Orders' : key === 'wishlist' ? 'Wishlist' : 'Password'}
+            {key === 'profile' ? 'Profile' : key === 'orders' ? 'Orders' : key === 'wishlist' ? 'Wishlist' : key === 'reviews' ? 'Reviews' : 'Password'}
           </button>
         ))}
       </div>
@@ -337,12 +340,12 @@ export function Account() {
 
       {tab === 'orders' && (
         <div className="space-y-4">
-          {orders.length === 0 ? (
+          {myOrders.length === 0 ? (
             <div className="rounded-2xl border border-gold/40 bg-white p-8 text-center text-ink/70">
               You have not placed any orders yet.
             </div>
           ) : (
-            orders.map(order => (
+            myOrders.map(order => (
               <div key={order.no} className="rounded-2xl border border-gold/40 bg-white p-5">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
@@ -355,7 +358,7 @@ export function Account() {
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm text-ink/70">
-                  <span>{order.items?.length || 0} item(s)</span>
+                  <span>{(order.items||[]).length} item(s) · Payment {order.paymentStatus||'unpaid'}</span>
                   <span className="font-bold text-maroon">{inr(order.total || 0)}</span>
                 </div>
               </div>
@@ -388,6 +391,12 @@ export function Account() {
         </div>
       )}
 
+      {tab === 'reviews' && (
+        <div className="rounded-2xl border border-gold/30 bg-ivory/50 p-4 sm:p-6">
+          <CustomerReviews initialName={session.name||user.name} initialEmail={session.email||user.email}/>
+        </div>
+      )}
+
       {tab === 'security' && (
         <form onSubmit={savePassword} noValidate className="grid gap-4 rounded-2xl border border-gold/40 bg-white p-6 md:max-w-xl">
           <Field label="Current password" id="currentPassword" type="password" value={passwords.currentPassword} onChange={e => setPasswords({ ...passwords, currentPassword: e.target.value })} />
@@ -403,87 +412,63 @@ export function Account() {
 export function OrderDetails() {
   const { orderId } = useParams()
   const orders = useOrders()
-  const order = orders.find(item => item.no === orderId)
+  const session = useAuthStatus()
+  const order = orders.find(item => item.no === orderId&&(item.email||'').toLowerCase()===(session?.email||'').toLowerCase())
 
+  if (!session?.loggedIn) return <Navigate to="/login" replace />
   if (!order) {
     return <Navigate to="/account" replace />
   }
 
+  const items=(order.items||[]).map(item=>({...item,product:byId[item.productId]||products.find(product=>product.name===item.name)}))
+  const status=order.status||'New'
+  const paymentStatus=String(order.paymentStatus||'unpaid').toLowerCase()
+  const placed=order.createdAt?new Date(order.createdAt):new Date(order.at)
+  const orderDate=Number.isNaN(placed.getTime())?order.at:placed.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})
+  const steps=['New','Packed','Delivered']
+  const stepIndex=steps.indexOf(status)
   return (
     <Wrap className="py-10">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-maroon">Order details</p>
-          <h1 className="text-4xl">{order.no}</h1>
+      <div className="mb-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="text-sm uppercase tracking-[0.2em] text-maroon">My order</p><h1 className="mt-1 text-3xl sm:text-4xl">#{order.no}</h1><p className="mt-2 text-sm text-ink/60">Placed on {orderDate}</p></div>
+          <Link to="/account" className={btnO}>Back to my orders</Link>
         </div>
-        <Link to="/account" className={btnO}>Back to account</Link>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Order status</p><p className="mt-1 font-bold text-maroon">{status}</p></div>
+          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Payment</p><p className="mt-1 font-bold capitalize">{paymentStatus}</p></div>
+          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Delivery</p><p className="mt-1 font-bold">{status==='Delivered'?'Delivered':status==='Cancelled'?'Cancelled':'In progress'}</p></div>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_0.8fr]">
-        <div className="rounded-2xl border border-gold/40 bg-white p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gold/30 pb-4">
-            <div>
-              <p className="text-sm text-ink/70">Payment status</p>
-              <p className="font-bold text-emerald">Paid</p>
-            </div>
-            <div>
-              <p className="text-sm text-ink/70">Order status</p>
-              <p className="font-bold text-maroon">{order.status || 'New'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-ink/70">Placed</p>
-              <p className="font-bold">{order.at}</p>
-            </div>
-          </div>
-
-          <ul className="space-y-4">
-            {(order.items || []).map(item => (
-              <li key={item.name} className="flex items-center justify-between gap-4 border-b border-gold/25 pb-4">
-                <div>
-                  <p className="font-bold">{item.name}</p>
-                  <p className="text-sm text-ink/70">Qty {item.q}</p>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,.8fr)]">
+        <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-2xl">Purchased products</h2><p className="mt-1 text-sm text-ink/60">{items.length} item(s)</p></div><p className="font-serif text-2xl font-bold text-maroon">{inr(order.total||0)}</p></div>
+          <ul className="space-y-4">{items.map((item,index)=>{
+            const product=item.product,productId=item.productId||product?.id
+            return <li key={`${productId||item.name}-${index}`} className="rounded-xl border border-gold/20 p-4">
+              <div className="flex gap-4">
+                <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">{product?<Img src={item.image||product.images[0]} alt={item.name} tone={product.hex} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-xs">Product photo</div>}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold">{item.name}</p><p className="mt-1 text-xs text-ink/60">SKU {item.sku||productId||'—'}{(item.category||product?.collection)&&` · ${item.category||product.collection}`}</p>
+                  <p className="mt-2 text-sm">Qty {item.q||1} × {inr(item.price||0)}</p><p className="mt-1 font-bold text-maroon">{inr((item.price||0)*(item.q||1))}</p>
+                  {productId&&<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2"><ReviewSummary productId={productId}/><ProductSalesSummary productId={productId}/></div>}
                 </div>
-                <p className="font-bold text-maroon">{inr((item.price || 0) * (item.q || 1))}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
+              </div>
+              {status==='Delivered'&&productId&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-ivory/70 p-3"><div><p className="font-bold">How was your product?</p><p className="text-xs text-ink/60">Share your feedback; reviews appear after shop moderation.</p></div><Link to={`/product/${productId}?review=1#product-reviews-heading`} className={btnO}>Rate this product</Link></div>}
+            </li>
+          })}</ul>
+        </section>
 
-        <aside className="space-y-4 rounded-2xl border border-gold/40 bg-white p-6">
-          <div>
-            <p className="text-sm text-ink/70">Shipping address</p>
-            <p className="mt-2 font-bold">{order.name}</p>
-            <p>{order.address}</p>
-          </div>
-          <div>
-            <p className="text-sm text-ink/70">Delivery</p>
-            <p className="mt-2">Next working day dispatch for demo order.</p>
-          </div>
-          <div>
-            <p className="text-sm text-ink/70">Invoice</p>
-            <p className="mt-2 font-bold text-maroon">{inr(order.total || 0)}</p>
-          </div>
+        <aside className="space-y-4">
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Delivery details</h2><p className="mt-3 font-bold">{order.name}</p><p className="mt-1 text-sm text-ink/70">{order.address}</p><p className="mt-2 text-sm text-ink/70">{order.phone}</p><p className="break-all text-sm text-ink/70">{order.email}</p></section>
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-maroon">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">This storefront uses demo checkout. No payment is collected unless a payment provider is configured.</p></section>
         </aside>
       </div>
 
-      <div className="mt-8 rounded-2xl border border-gold/40 bg-white p-6">
-        <h2 className="text-2xl">Order timeline</h2>
-        <div className="mt-4 space-y-3">
-          {[
-            'Order placed',
-            'Payment confirmed',
-            'Packed in studio',
-            'Out for delivery',
-            'Delivered',
-          ].map((step, index) => (
-            <div key={step} className="flex items-center gap-3">
-              <span className={'grid h-7 w-7 place-items-center rounded-full text-xs font-bold ' + (index === 0 ? 'bg-maroon text-ivory' : 'bg-gold/20 text-maroon')}>
-                {index + 1}
-              </span>
-              <span>{step}</span>
-            </div>
-          ))}
-        </div>
+      <div className="mt-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
+        <h2 className="text-xl">Order progress</h2>
+        {status==='Cancelled'||status==='Refunded'?<p className="mt-3 rounded-lg bg-red-50 p-3 font-bold text-red-800">{status}</p>:<div className="mt-4 grid gap-3 sm:grid-cols-3">{steps.map((step,index)=><div key={step} className="flex items-center gap-3"><span className={'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold '+(index<=stepIndex?'bg-maroon text-ivory':'bg-gold/20 text-maroon')}>{index<=stepIndex?'✓':index+1}</span><span className={index<=stepIndex?'font-bold':'text-ink/60'}>{step}</span></div>)}</div>}
       </div>
     </Wrap>
   )

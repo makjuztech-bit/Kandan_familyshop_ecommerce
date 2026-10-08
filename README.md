@@ -13,4 +13,8 @@ Do not commit `.env` or expose the App Password in frontend code. The order page
 
 Edit shop address/phone/email/social/WhatsApp/image paths in `src/config/shop.js`; products in `src/data/products.js`. Images go in `public/images/` (hero-silk-showroom.jpg, bridal-banner.jpg, about-draping.jpg, collections/, and products/). Missing images show a silk-coloured placeholder.
 
-The login page includes a demo mobile OTP flow. It generates a code in the browser for local testing and does not send SMS; do not use this client-side demo flow for production authentication. A production OTP flow needs server-side verification and an SMS provider. Use the theme button in the header (or Admin panel) to switch between light and dark themes; the choice is saved in browser storage.
+The login page includes a demo mobile OTP flow. It generates a code in the browser for local testing and does not send SMS; do not use this client-side demo flow for production authentication. A production OTP flow needs server-side verification and an SMS provider.
+
+Customer reviews are stored in SQLite at `server/data/reviews.sqlite` (or the optional `REVIEWS_DB_PATH`). Public pages show approved reviews only. Set a random `REVIEWS_ADMIN_TOKEN` of at least 32 characters and a separate `REVIEWS_VOTE_SALT` in `.env` to use the protected Admin > Reviews moderation tools. Review photos are limited to 2 MB. Keep `.env` and the SQLite database private and use persistent storage in deployment.
+
+The Reviews page is available from the main navigation. Reviews submitted by customers remain pending until moderated; the storefront does not seed fictional testimonials or rating totals.

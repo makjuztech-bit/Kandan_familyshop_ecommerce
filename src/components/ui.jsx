@@ -3,6 +3,7 @@ import {Link} from 'react-router-dom'
 import {useStore} from '../context/Store'
 import {inr} from '../data/products'
 import {SHOP} from '../config/shop'
+import {ReviewSummary} from './Rating'
 export const btn='inline-flex min-h-11 items-center justify-center px-6 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 '
 export const btnP=btn+'bg-maroon text-ivory hover:bg-maroon-dark',btnO=btn+'border border-maroon text-maroon hover:bg-maroon hover:text-ivory',btnG=btn+'bg-gold text-ink hover:bg-gold-dark hover:text-ivory'
 export function Img({src,alt,tone='#6b1523',className=''}){const [bad,setBad]=useState(false);useEffect(()=>setBad(false),[src])
@@ -13,7 +14,7 @@ export const Title=({children,sub})=><div className="mb-8 text-center"><h2 class
 export function ProductCard({p}){const {wish,toggleWish}=useStore(),on=wish.includes(p.id)
  return <article className="group relative"><Link to={'/product/'+p.id} className="block">
   <div className="aspect-[3/4] overflow-hidden bg-ivory-dark"><Img src={p.images[0]} alt={p.name} tone={p.hex} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"/></div>
-  <h3 className="mt-3 text-lg leading-snug">{p.name}</h3><p className="text-sm text-ink/60">{p.collection}</p>
+  <h3 className="mt-3 text-lg leading-snug">{p.name}</h3><p className="text-sm text-ink/60">{p.collection}</p><ReviewSummary productId={p.id}/>
   <p className="font-bold text-maroon">{inr(p.price)}{!p.stock&&<span className="ml-2 text-xs font-normal text-ink/60">Out of stock</span>}</p></Link>
   <button onClick={()=>toggleWish(p.id)} aria-pressed={on} aria-label={(on?'Remove ':'Add ')+p.name+(on?' from':' to')+' wishlist'} className="absolute right-2 top-2 grid h-11 w-11 place-items-center rounded-full bg-ivory/90 text-xl text-maroon shadow">{on?'♥':'♡'}</button></article>}
 export const Grid=({items})=><div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 lg:grid-cols-4">{items.map(p=><ProductCard key={p.id} p={p}/>)}</div>

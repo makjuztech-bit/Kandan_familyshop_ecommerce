@@ -1,17 +1,8 @@
 @tailwind base;@tailwind components;@tailwind utilities;
 :root{--maroon:107 21 35;--maroon-dark:74 14 24;--ivory:250 244 232;--ivory-dark:239 229 208;--gold:184 150 79;--gold-dark:138 109 47;--emerald:31 107 82;--ink:42 26 26;color-scheme:light}
-:root[data-theme='dark']{--maroon:225 187 113;--maroon-dark:246 237 218;--ivory:31 29 27;--ivory-dark:40 37 34;--gold:208 172 102;--gold-dark:229 200 127;--emerald:102 199 163;--ink:243 238 230;color-scheme:dark}
 body{@apply bg-ivory text-ink font-sans overflow-x-hidden}
 h1,h2,h3{@apply font-serif text-maroon-dark}
 .weave{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.06) 0 2px,transparent 2px 6px),repeating-linear-gradient(-45deg,rgba(0,0,0,.1) 0 2px,transparent 2px 6px)}
 .zari{height:6px;background:repeating-linear-gradient(90deg,#b8964f 0 8px,transparent 8px 12px)}
-:root[data-theme='dark'] .bg-white{background-color:#262320}
-:root[data-theme='dark'] .bg-red-50{background-color:#421f20}
-:root[data-theme='dark'] .bg-red-100{background-color:#512829}
-:root[data-theme='dark'] .text-red-700,:root[data-theme='dark'] .text-red-800{color:#ffb4ad}
-:root[data-theme='dark'] .bg-blue-100{background-color:#203344}
-:root[data-theme='dark'] .text-blue-800{color:#b7d8ff}
-:root[data-theme='dark'] .bg-amber-50{background-color:#40351e}
-:root[data-theme='dark'] .text-amber-900{color:#f2dda8}
 :focus-visible{outline:2px solid #b8964f;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

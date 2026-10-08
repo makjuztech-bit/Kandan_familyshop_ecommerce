@@ -5,11 +5,10 @@ import {SHOP} from '../config/shop'
 import {Wrap} from './ui'
 import {useCatalog} from '../data/products'
 import { useAuthStatus } from '../data/auth'
-import {useTheme} from '../context/Theme'
 
-const nav=[['/','Home'],['/shop','Shop'],['/category/Soft%20Silk','Collections'],['/about','About'],['/contact','Contact'],['/account','Account']]
+const nav=[['/','Home'],['/shop','Shop'],['/category/Soft%20Silk','Collections'],['/reviews','Reviews'],['/about','About'],['/contact','Contact'],['/account','Account']]
 
-export default function Layout(){const cv=useCatalog(),{count,wish}=useStore(),auth=useAuthStatus(),{theme,toggleTheme}=useTheme(),[open,setOpen]=useState(false),[q,setQ]=useState(''),nv=useNavigate(),{pathname,hash}=useLocation()
+export default function Layout(){const cv=useCatalog(),{count,wish}=useStore(),auth=useAuthStatus(),[open,setOpen]=useState(false),[q,setQ]=useState(''),nv=useNavigate(),{pathname,hash}=useLocation()
  useEffect(()=>{setOpen(false);if(hash){setTimeout(()=>document.querySelector(hash)?.scrollIntoView(),50)}else window.scrollTo(0,0)},[pathname,hash])
  const go=e=>{e.preventDefault();nv('/shop?q='+encodeURIComponent(q.trim()))}
  const ic='relative grid h-11 min-w-11 place-items-center px-2 text-sm font-bold text-maroon'
@@ -20,7 +19,6 @@ export default function Layout(){const cv=useCatalog(),{count,wish}=useStore(),a
   <Link to="/" className="font-serif text-xl font-bold text-maroon sm:text-2xl">Kandan Family Shop</Link>
   <nav aria-label="Main" className="hidden gap-6 md:flex">{nav.map(([t,l])=><NavLink key={l} to={t} end={t==='/' ? true : undefined} className="py-2 text-sm font-bold hover:text-maroon">{l}</NavLink>)}</nav>
   <div className="flex items-center"><form onSubmit={go} role="search" className="hidden lg:block"><label className="sr-only" htmlFor="hs">Search sarees</label><input id="hs" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search sarees" className="h-10 w-44 border border-gold-dark/50 bg-white px-3 text-sm"/></form>
-   <button type="button" className={ic} onClick={toggleTheme} aria-label={`Switch to ${theme==='light'?'dark':'light'} theme`} title={`Switch to ${theme==='light'?'dark':'light'} theme`}>{theme==='light'?'Dark':'Light'}</button>
    <Link to="/wishlist" className={ic} aria-label={`Wishlist, ${wish.length} items`}>♡ {wish.length>0&&<span>{wish.length}</span>}</Link>
    <Link to="/cart" className={ic} aria-label={`Cart, ${count} items`}>Cart <span className="ml-1 rounded-full bg-maroon px-1.5 text-xs text-ivory">{count}</span></Link>
    <Link to={auth?.loggedIn ? '/account' : '/login'} className={ic}>{auth?.loggedIn ? 'Account' : 'Login'}</Link>

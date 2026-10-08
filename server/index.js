@@ -2,13 +2,14 @@ import 'dotenv/config'
 import express from 'express'
 import rateLimit from 'express-rate-limit'
 import nodemailer from 'nodemailer'
+import {registerReviewRoutes} from './reviews.js'
 
 const app = express()
 const port = Number(process.env.PORT) || 3001
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 app.disable('x-powered-by')
-app.use(express.json({ limit: '24kb', type: 'application/json' }))
+app.use(express.json({ limit: '3mb', type: 'application/json' }))
 
 const orderEmailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -56,6 +57,8 @@ function createTransport() {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, emailConfigured: !!createTransport() })
 })
+
+registerReviewRoutes(app)
 
 app.post('/api/order-email', orderEmailLimiter, async (req, res) => {
   const validationError = validateOrder(req.body)
@@ -105,6 +108,9 @@ app.post('/api/order-email', orderEmailLimiter, async (req, res) => {
 })
 
 app.use((error, _req, res, _next) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request is too large. Customer photos are limited to 2 MB.' })
+  }
   if (error instanceof SyntaxError && 'body' in error) {
     return res.status(400).json({ error: 'Request body must be valid JSON.' })
   }

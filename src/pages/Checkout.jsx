@@ -13,8 +13,8 @@ export default function Checkout(){const {lines,total,clear}=useStore(),[v,setV]
   catch(error){const message=error instanceof Error?error.message:'Could not send the order email.';setEmailStatus('error');setEmailError(message);updateOrder(placedOrder.no,{emailStatus:'error',emailError:message})}
  }
  const submit=async e=>{e.preventDefault();const er=validate(v,K);setErr(er);if(Object.keys(er).length){document.getElementById(Object.keys(er)[0])?.focus();return}
-  const no='KFS-'+Date.now().toString(36).toUpperCase(),placedOrder={no,lines,total,...v};setOrder(placedOrder);setEmailStatus('sending')
-  addOrder({no,...v,total,status:'New',emailStatus:'sending',emailError:'',items:lines.map(l=>({name:l.name,q:l.q,price:l.price})),at:new Date().toLocaleString('en-IN')})
+  const now=new Date(),no='KFS-'+Date.now().toString(36).toUpperCase(),placedOrder={no,lines,total,...v};setOrder(placedOrder);setEmailStatus('sending')
+  addOrder({no,...v,total,status:'New',paymentStatus:'unpaid',paymentMethod:'Demo checkout — no payment collected',emailStatus:'sending',emailError:'',items:lines.map(l=>({productId:l.id,sku:l.id.toUpperCase(),name:l.name,category:l.collection,image:l.images[0],price:l.price,q:l.q})),createdAt:now.toISOString(),at:now.toLocaleString('en-IN')})
   clear();await sendNotification(placedOrder)}
  const ch=e=>setV({...v,[e.target.name]:e.target.value})
  if(order){

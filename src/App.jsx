@@ -8,6 +8,7 @@ import Admin from './pages/Admin'
 import Checkout from './pages/Checkout'
 import { About, Contact, Policy, NotFound } from './pages/Info'
 import { Account, ForgotPassword, Login, OrderDetails, Register } from './pages/Auth'
+import Reviews from './pages/Reviews'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="shop" element={<Shop />} />
         <Route path="category/:category" element={<CategoryPage />} />
         <Route path="product/:id" element={<Product />} />
+        <Route path="reviews" element={<Reviews />} />
         <Route path="cart" element={<Cart />} />
         <Route path="wishlist" element={<Wishlist />} />
         <Route path="checkout" element={<Checkout />} />
