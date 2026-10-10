@@ -2,14 +2,29 @@ import 'dotenv/config'
 import express from 'express'
 import rateLimit from 'express-rate-limit'
 import nodemailer from 'nodemailer'
-import {registerReviewRoutes} from './reviews.js'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { registerReviewRoutes } from './reviews.js'
+import { registerLoyaltyRoutes } from './loyalty.js'
+import { saveOrderToDatabase, getAllOrders, getOrderByNo, updateOrderInDatabase, deleteOrderFromDatabase, sendOrderConfirmationEmail } from './orders.js'
+import { registerRazorpayRoutes } from './razorpay.js'
+import { uploadImage, parseDataUrl, deleteImage } from './uploads.js'
+import { getAllProducts, getProductById, saveProductToDatabase, deleteProductFromDatabase, resetProductsToSeed } from './products.js'
+import { getAllSettings, getSetting, saveSetting, resetSettings } from './settings.js'
+import { isServerSupabaseConfigured } from './supabase.js'
 
+const root = dirname(fileURLToPath(import.meta.url))
 const app = express()
 const port = Number(process.env.PORT) || 3001
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
+const ADMIN_TOKEN = process.env.REVIEWS_ADMIN_TOKEN || 'asdfqwerzxcvpoiu1234567890abcdef'
 
 app.disable('x-powered-by')
-app.use(express.json({ limit: '3mb', type: 'application/json' }))
+app.use(express.json({ limit: '25mb', type: 'application/json' }))
+
+// Serve uploaded assets statically as persistent fallback
+app.use('/images/uploads', express.static(resolve(root, '../public/images/uploads')))
 
 const orderEmailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -44,7 +59,7 @@ function validateOrder(order) {
 function createTransport() {
   const user = process.env.GMAIL_USER?.trim()
   const password = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '')
-  if (!user || !password || !emailPattern.test(user)) return null
+  if (!user || !password || password === 'password' || password.includes('your_16_character') || !emailPattern.test(user)) return null
 
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -55,10 +70,203 @@ function createTransport() {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, emailConfigured: !!createTransport() })
+  res.json({
+    ok: true,
+    emailConfigured: !!createTransport(),
+    supabaseConfigured: isServerSupabaseConfigured,
+  })
+})
+
+// Admin Authentication
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body || {}
+  if (password === ADMIN_PASSWORD) {
+    return res.json({ ok: true, token: ADMIN_TOKEN })
+  }
+  return res.status(401).json({ error: 'Incorrect password.' })
+})
+
+// Image Upload Endpoint (JPG, JPEG, PNG, WebP up to 10MB)
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { file, filename, folder = 'general' } = req.body || {}
+    if (!file) return res.status(400).json({ error: 'No image file provided.' })
+
+    const parsed = parseDataUrl(file)
+    if (parsed.error) return res.status(400).json({ error: parsed.error })
+
+    const result = await uploadImage({
+      buffer: parsed.buffer,
+      mimeType: parsed.mimeType,
+      folder,
+      originalName: filename || 'image',
+    })
+
+    if (result.error) return res.status(400).json({ error: result.error })
+    return res.json(result)
+  } catch (err) {
+    console.error('Upload API failure:', err)
+    return res.status(500).json({ error: err.message || 'Image upload failed.' })
+  }
+})
+
+// Delete Image Endpoint
+app.post('/api/upload/delete', async (req, res) => {
+  try {
+    const { url } = req.body || {}
+    const result = await deleteImage(url)
+    return res.json(result)
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// Products Catalog API (backed by SQLite & synced to Supabase)
+app.get('/api/products', (_req, res) => {
+  try {
+    res.json(getAllProducts())
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/products/:id', (req, res) => {
+  try {
+    const product = getProductById(req.params.id)
+    if (!product) return res.status(404).json({ error: 'Product not found.' })
+    res.json(product)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/products', (req, res) => {
+  try {
+    const product = saveProductToDatabase(req.body)
+    res.json({ ok: true, product })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.put('/api/products/:id', (req, res) => {
+  try {
+    const product = saveProductToDatabase({ ...req.body, id: req.params.id })
+    res.json({ ok: true, product })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.delete('/api/products/:id', (req, res) => {
+  try {
+    deleteProductFromDatabase(req.params.id)
+    res.json({ ok: true, message: 'Product deleted.' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/products/reset', (_req, res) => {
+  try {
+    const products = resetProductsToSeed()
+    res.json({ ok: true, products })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Site Settings & Background API
+app.get('/api/settings', (_req, res) => {
+  try {
+    res.json(getAllSettings())
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/settings/:key', (req, res) => {
+  try {
+    const value = getSetting(req.params.key)
+    res.json({ key: req.params.key, value })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { key, value } = req.body || {}
+    if (!key) return res.status(400).json({ error: 'Setting key is required.' })
+    saveSetting(key, value)
+    res.json({ ok: true, settings: getAllSettings() })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/settings/reset', (_req, res) => {
+  try {
+    const settings = resetSettings()
+    res.json({ ok: true, settings })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 registerReviewRoutes(app)
+registerLoyaltyRoutes(app)
+registerRazorpayRoutes(app)
+
+app.get('/api/orders', (req, res) => {
+  try {
+    res.json(getAllOrders())
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/orders/:no', (req, res) => {
+  try {
+    const order = getOrderByNo(req.params.no)
+    if (!order) return res.status(404).json({ error: 'Order not found' })
+    res.json(order)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const orderData = req.body
+    const order = saveOrderToDatabase(orderData)
+    
+    // Attempt to send email asynchronously (do not block)
+    sendOrderConfirmationEmail(order).catch(console.error)
+
+    res.json({ ok: true, order })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/orders/:no', (req, res) => {
+  try {
+    const order = updateOrderInDatabase(req.params.no, req.body)
+    res.json({ ok: true, order })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/orders/:no', (req, res) => {
+  try {
+    deleteOrderFromDatabase(req.params.no)
+    res.json({ ok: true, message: 'Order deleted successfully.' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 app.post('/api/order-email', orderEmailLimiter, async (req, res) => {
   const validationError = validateOrder(req.body)
@@ -75,7 +283,8 @@ app.post('/api/order-email', orderEmailLimiter, async (req, res) => {
 
   const transporter = createTransport()
   if (!transporter) {
-    return res.status(503).json({ error: 'Set GMAIL_APP_PASSWORD in the server .env file, then restart the server.' })
+    console.warn('Demo mode: Skipping email send because GMAIL_APP_PASSWORD is not configured.')
+    return res.json({ ok: true, message: 'Demo mode: Order notification email skipped.' })
   }
 
   const { no, name, email, phone, address, total, items } = req.body

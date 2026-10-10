@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/Store'
 import { useOrders } from '../data/orders'
@@ -110,9 +110,9 @@ export function Login() {
           </form>}
           {message && <p role="alert" className="mt-4 rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
           <p className="mt-5 text-center text-sm text-ink/70">
-            <button type="button" className="font-bold text-maroon" onClick={() => { setMode('email'); setMessage(''); setErrors({}) }}>Use email and password instead</button>
+            <button type="button" className="font-bold text-primary" onClick={() => { setMode('email'); setMessage(''); setErrors({}) }}>Use email and password instead</button>
           </p>
-          <p className="mt-3 text-center text-sm text-ink/70">New here? <Link to="/register" className="font-bold text-maroon">Create account</Link></p>
+          <p className="mt-3 text-center text-sm text-ink/70">New here? <Link to="/register" className="font-bold text-primary">Create account</Link></p>
         </div>
       </Wrap>
     )
@@ -140,24 +140,24 @@ export function Login() {
     <Wrap className="py-12">
       <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
         <h1 className="text-3xl">Login</h1>
-        <p className="mt-2 text-sm text-ink/70">Welcome back to Kandan Family Shop. Demo login uses the default account.</p>
+        <p className="mt-2 text-sm text-ink/70">Welcome back to Sri Kandan Family Shop. Demo login uses the default account.</p>
         <form onSubmit={submit} noValidate className="mt-6 space-y-4">
           <Field label="Email" id="email" type="email" name="email" value={values.email} onChange={onChange} error={errors.email} />
           <Field label="Password" id="password" type="password" name="password" value={values.password} onChange={onChange} error={errors.password} />
           <div className="flex items-center justify-between text-sm">
             <label className="flex items-center gap-2">
-              <input type="checkbox" className="h-4 w-4 accent-maroon" defaultChecked />
+              <input type="checkbox" className="h-4 w-4 accent-primary" defaultChecked />
               Remember me
             </label>
-            <Link to="/forgot-password" className="font-bold text-maroon">Forgot password?</Link>
+            <Link to="/forgot-password" className="font-bold text-primary">Forgot password?</Link>
           </div>
           <button className={btnP + ' w-full'}>Login</button>
           {message && <p role="status" className="rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
           <p className="text-center text-sm text-ink/70">
-            <button type="button" className="font-bold text-maroon" onClick={() => { setMode('otp'); setMessage(''); setErrors({}) }}>Login with mobile OTP</button>
+            <button type="button" className="font-bold text-primary" onClick={() => { setMode('otp'); setMessage(''); setErrors({}) }}>Login with mobile OTP</button>
           </p>
           <p className="text-center text-sm text-ink/70">
-            New here? <Link to="/register" className="font-bold text-maroon">Create account</Link>
+            New here? <Link to="/register" className="font-bold text-primary">Create account</Link>
           </p>
         </form>
       </div>
@@ -227,7 +227,7 @@ export function Register() {
           </div>
           {message && <p className="md:col-span-2 rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
           <p className="md:col-span-2 text-center text-sm text-ink/70">
-            Already have an account? <Link to="/login" className="font-bold text-maroon">Log in</Link>
+            Already have an account? <Link to="/login" className="font-bold text-primary">Log in</Link>
           </p>
         </form>
       </div>
@@ -254,7 +254,7 @@ export function ForgotPassword() {
           <button className={btnP + ' w-full'}>Send reset link</button>
           {message && <p role="status" className="rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
           <p className="text-center text-sm text-ink/70">
-            Back to <Link to="/login" className="font-bold text-maroon">login</Link>
+            Back to <Link to="/login" className="font-bold text-primary">login</Link>
           </p>
         </form>
       </div>
@@ -294,13 +294,13 @@ export function Account() {
   }
 
   const wishlistItems = wish.map(id => byId[id]).filter(Boolean)
-  const tabs = ['profile', 'orders', 'wishlist', 'reviews', 'security']
+  const tabs = ['profile', 'orders', 'loyalty', 'wishlist', 'reviews', 'security']
 
   return (
     <Wrap className="py-10">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-maroon">My account</p>
+          <p className="text-sm uppercase tracking-[0.2em] text-primary">My account</p>
           <h1 className="text-4xl">Hello, {session.name}</h1>
         </div>
         <button className={btnO} onClick={() => logoutDemoUser()}>Logout</button>
@@ -314,10 +314,10 @@ export function Account() {
             onClick={() => setTab(key)}
             className={
               'min-h-11 rounded-full px-4 text-sm font-bold ' +
-              (tab === key ? 'bg-maroon text-ivory' : 'border border-gold/40 bg-white text-maroon')
+              (tab === key ? 'bg-primary text-ivory' : 'border border-gold/40 bg-white text-primary')
             }
           >
-            {key === 'profile' ? 'Profile' : key === 'orders' ? 'Orders' : key === 'wishlist' ? 'Wishlist' : key === 'reviews' ? 'Reviews' : 'Password'}
+            {key === 'profile' ? 'Profile' : key === 'orders' ? 'Orders' : key === 'wishlist' ? 'Wishlist' : key === 'reviews' ? 'Reviews' : key === 'loyalty' ? 'Loyalty' : 'Password'}
           </button>
         ))}
       </div>
@@ -354,12 +354,12 @@ export function Account() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-bold">{order.status || 'New'}</span>
-                    <Link to={'/order/' + order.no} className="font-bold text-maroon">View details</Link>
+                    <Link to={'/order/' + order.no} className="font-bold text-primary">View details</Link>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm text-ink/70">
                   <span>{(order.items||[]).length} item(s) · Payment {order.paymentStatus||'unpaid'}</span>
-                  <span className="font-bold text-maroon">{inr(order.total || 0)}</span>
+                  <span className="font-bold text-primary">{inr(order.total || 0)}</span>
                 </div>
               </div>
             ))
@@ -371,7 +371,7 @@ export function Account() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {wishlistItems.length === 0 ? (
             <div className="md:col-span-2 xl:col-span-4 rounded-2xl border border-gold/40 bg-white p-8 text-center text-ink/70">
-              Your wishlist is empty. <Link to="/shop" className="font-bold text-maroon">Browse sarees</Link>
+              Your wishlist is empty. <Link to="/shop" className="font-bold text-primary">Browse sarees</Link>
             </div>
           ) : (
             wishlistItems.map(product => (
@@ -382,7 +382,7 @@ export function Account() {
                 <h2 className="mt-3 text-lg">{product.name}</h2>
                 <p className="text-sm text-ink/70">{product.collection}</p>
                 <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="font-bold text-maroon">{inr(product.price)}</span>
+                  <span className="font-bold text-primary">{inr(product.price)}</span>
                   <button className={btnO} onClick={() => toggleWish(product.id)}>Remove</button>
                 </div>
               </div>
@@ -395,6 +395,10 @@ export function Account() {
         <div className="rounded-2xl border border-gold/30 bg-ivory/50 p-4 sm:p-6">
           <CustomerReviews initialName={session.name||user.name} initialEmail={session.email||user.email}/>
         </div>
+      )}
+
+      {tab === 'loyalty' && (
+        <CustomerLoyaltyTab email={session.email} name={session.name} />
       )}
 
       {tab === 'security' && (
@@ -431,11 +435,11 @@ export function OrderDetails() {
     <Wrap className="py-10">
       <div className="mb-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><p className="text-sm uppercase tracking-[0.2em] text-maroon">My order</p><h1 className="mt-1 text-3xl sm:text-4xl">#{order.no}</h1><p className="mt-2 text-sm text-ink/60">Placed on {orderDate}</p></div>
+          <div><p className="text-sm uppercase tracking-[0.2em] text-primary">My order</p><h1 className="mt-1 text-3xl sm:text-4xl">#{order.no}</h1><p className="mt-2 text-sm text-ink/60">Placed on {orderDate}</p></div>
           <Link to="/account" className={btnO}>Back to my orders</Link>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Order status</p><p className="mt-1 font-bold text-maroon">{status}</p></div>
+          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Order status</p><p className="mt-1 font-bold text-primary">{status}</p></div>
           <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Payment</p><p className="mt-1 font-bold capitalize">{paymentStatus}</p></div>
           <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Delivery</p><p className="mt-1 font-bold">{status==='Delivered'?'Delivered':status==='Cancelled'?'Cancelled':'In progress'}</p></div>
         </div>
@@ -443,7 +447,7 @@ export function OrderDetails() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,.8fr)]">
         <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-2xl">Purchased products</h2><p className="mt-1 text-sm text-ink/60">{items.length} item(s)</p></div><p className="font-serif text-2xl font-bold text-maroon">{inr(order.total||0)}</p></div>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-2xl">Purchased products</h2><p className="mt-1 text-sm text-ink/60">{items.length} item(s)</p></div><p className="font-serif text-2xl font-bold text-primary">{inr(order.total||0)}</p></div>
           <ul className="space-y-4">{items.map((item,index)=>{
             const product=item.product,productId=item.productId||product?.id
             return <li key={`${productId||item.name}-${index}`} className="rounded-xl border border-gold/20 p-4">
@@ -451,7 +455,7 @@ export function OrderDetails() {
                 <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">{product?<Img src={item.image||product.images[0]} alt={item.name} tone={product.hex} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-xs">Product photo</div>}</div>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold">{item.name}</p><p className="mt-1 text-xs text-ink/60">SKU {item.sku||productId||'—'}{(item.category||product?.collection)&&` · ${item.category||product.collection}`}</p>
-                  <p className="mt-2 text-sm">Qty {item.q||1} × {inr(item.price||0)}</p><p className="mt-1 font-bold text-maroon">{inr((item.price||0)*(item.q||1))}</p>
+                  <p className="mt-2 text-sm">Qty {item.q||1} × {inr(item.price||0)}</p><p className="mt-1 font-bold text-primary">{inr((item.price||0)*(item.q||1))}</p>
                   {productId&&<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2"><ReviewSummary productId={productId}/><ProductSalesSummary productId={productId}/></div>}
                 </div>
               </div>
@@ -462,13 +466,13 @@ export function OrderDetails() {
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Delivery details</h2><p className="mt-3 font-bold">{order.name}</p><p className="mt-1 text-sm text-ink/70">{order.address}</p><p className="mt-2 text-sm text-ink/70">{order.phone}</p><p className="break-all text-sm text-ink/70">{order.email}</p></section>
-          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-maroon">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">This storefront uses demo checkout. No payment is collected unless a payment provider is configured.</p></section>
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">This storefront uses demo checkout. No payment is collected unless a payment provider is configured.</p></section>
         </aside>
       </div>
 
       <div className="mt-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
         <h2 className="text-xl">Order progress</h2>
-        {status==='Cancelled'||status==='Refunded'?<p className="mt-3 rounded-lg bg-red-50 p-3 font-bold text-red-800">{status}</p>:<div className="mt-4 grid gap-3 sm:grid-cols-3">{steps.map((step,index)=><div key={step} className="flex items-center gap-3"><span className={'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold '+(index<=stepIndex?'bg-maroon text-ivory':'bg-gold/20 text-maroon')}>{index<=stepIndex?'✓':index+1}</span><span className={index<=stepIndex?'font-bold':'text-ink/60'}>{step}</span></div>)}</div>}
+        {status==='Cancelled'||status==='Refunded'?<p className="mt-3 rounded-lg bg-red-50 p-3 font-bold text-red-800">{status}</p>:<div className="mt-4 grid gap-3 sm:grid-cols-3">{steps.map((step,index)=><div key={step} className="flex items-center gap-3"><span className={'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold '+(index<=stepIndex?'bg-primary text-ivory':'bg-gold/20 text-primary')}>{index<=stepIndex?'✓':index+1}</span><span className={index<=stepIndex?'font-bold':'text-ink/60'}>{step}</span></div>)}</div>}
       </div>
     </Wrap>
   )
@@ -483,7 +487,7 @@ export function CategoryPage() {
     <Wrap className="py-10">
       <div className="mb-8 flex items-end justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-maroon">Collection</p>
+          <p className="text-sm uppercase tracking-[0.2em] text-primary">Collection</p>
           <h1 className="text-4xl">{label}</h1>
         </div>
         <Link to="/shop" className={btnO}>Browse all</Link>
@@ -501,7 +505,7 @@ export function CategoryPage() {
                 <h2 className="mt-3 text-lg">{product.name}</h2>
               </Link>
               <div className="mt-2 flex items-center justify-between gap-3">
-                <span className="font-bold text-maroon">{inr(product.price)}</span>
+                <span className="font-bold text-primary">{inr(product.price)}</span>
                 <Link to={'/product/' + product.id} className={btnP}>View</Link>
               </div>
             </div>
@@ -509,5 +513,137 @@ export function CategoryPage() {
         </div>
       )}
     </Wrap>
+  )
+}
+
+export function CustomerLoyaltyTab({ email, name }) {
+  const [data, setData] = useState(null)
+  const [config, setConfig] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/loyalty/config').then(r=>r.json()),
+      fetch(`/api/loyalty/customer?email=${encodeURIComponent(email)}`).then(r=>r.json())
+    ])
+      .then(([configData, customerData]) => {
+        setConfig(configData)
+        setData(customerData)
+        setLoading(false)
+      })
+      .catch(err => {
+        setError('Could not load loyalty information.')
+        setLoading(false)
+      })
+  }, [email])
+
+  if (loading) return <div className="text-center py-10 text-ink/60">Loading loyalty program...</div>
+  if (error) return <div className="text-center py-10 text-red-600">{error}</div>
+
+  const isEnabled = config?.enabled
+  if (!isEnabled) {
+    return (
+      <div className="rounded-2xl border border-gold/40 bg-white p-8 text-center text-ink/70">
+        The loyalty program is currently paused. Please check back later!
+      </div>
+    )
+  }
+
+  const { balance = 0, totalEarned = 0, totalRedeemed = 0, transactions = [] } = data || {}
+
+  return (
+    <div className="space-y-6">
+      {/* Overview Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl bg-primary text-ivory p-6 shadow-sm flex flex-col justify-between">
+          <p className="text-sm uppercase tracking-wider text-ivory/80">Available Points</p>
+          <div className="mt-4">
+            <span className="text-5xl font-serif">{balance}</span>
+            <span className="text-lg ml-2">pts</span>
+          </div>
+          <p className="mt-4 text-sm text-ivory/80">Value: ₹{(balance * (config.pointValueInInr || 1)).toFixed(2)}</p>
+        </div>
+        
+        <div className="rounded-2xl border border-gold/40 bg-white p-6 shadow-sm">
+          <p className="text-sm uppercase tracking-wider text-ink/60">Lifetime Earned</p>
+          <div className="mt-4">
+            <span className="text-3xl font-serif text-emerald-700">{totalEarned}</span>
+            <span className="text-sm ml-1 text-ink/60">pts</span>
+          </div>
+          <p className="mt-4 text-xs text-ink/50">Total points ever earned</p>
+        </div>
+
+        <div className="rounded-2xl border border-gold/40 bg-white p-6 shadow-sm">
+          <p className="text-sm uppercase tracking-wider text-ink/60">Total Redeemed</p>
+          <div className="mt-4">
+            <span className="text-3xl font-serif text-primary/70">{totalRedeemed}</span>
+            <span className="text-sm ml-1 text-ink/60">pts</span>
+          </div>
+          <p className="mt-4 text-xs text-ink/50">Total points spent on orders</p>
+        </div>
+      </div>
+
+      {/* Benefits */}
+      <div className="rounded-2xl border border-gold/30 bg-ivory/40 p-6">
+        <h3 className="font-serif text-xl text-primary mb-3">How it works</h3>
+        <ul className="list-disc pl-5 space-y-2 text-sm text-ink/80">
+          <li>Earn <strong>{config.pointsPerUnit} point</strong> for every <strong>₹{config.spendPerPoint}</strong> spent.</li>
+          <li>Each point is worth <strong>₹{config.pointValueInInr}</strong> off your next order.</li>
+          {config.minPointsToRedeem > 0 && <li>Minimum <strong>{config.minPointsToRedeem} points</strong> required to redeem.</li>}
+          <li>You can pay up to <strong>{config.maxRedemptionPercent}%</strong> of your order total using points.</li>
+        </ul>
+      </div>
+
+      {/* Transaction History */}
+      <div>
+        <h3 className="font-serif text-2xl mb-4">Points History</h3>
+        {transactions.length === 0 ? (
+          <div className="rounded-xl border border-gold/20 bg-white p-6 text-center text-ink/60">
+            No points history yet. Place an order to start earning!
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gold/30 bg-white overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gold/10 border-b border-gold/20">
+                  <tr>
+                    <th className="p-4 font-semibold text-ink/70">Date</th>
+                    <th className="p-4 font-semibold text-ink/70">Type</th>
+                    <th className="p-4 font-semibold text-ink/70">Details</th>
+                    <th className="p-4 font-semibold text-ink/70 text-right">Points</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gold/10">
+                  {transactions.map(tx => (
+                    <tr key={tx.id} className="hover:bg-ivory/30 transition-colors">
+                      <td className="p-4 whitespace-nowrap text-ink/80">
+                        {new Date(tx.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                          tx.type === 'EARNED' ? 'bg-emerald-100 text-emerald-800' : 
+                          tx.type === 'REDEEMED' ? 'bg-amber-100 text-amber-800' :
+                          tx.type === 'REVERSED' ? 'bg-red-100 text-red-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {tx.type}
+                        </span>
+                      </td>
+                      <td className="p-4 text-ink/70 max-w-[200px] truncate" title={tx.note}>
+                        {tx.note || (tx.orderNo ? `Order #${tx.orderNo}` : '—')}
+                      </td>
+                      <td className={`p-4 text-right font-bold ${tx.points > 0 ? 'text-emerald-700' : tx.points < 0 ? 'text-red-600' : 'text-ink'}`}>
+                        {tx.points > 0 ? `+${tx.points}` : tx.points}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

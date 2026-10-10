@@ -84,7 +84,7 @@ function ReviewCard({review,onAction}){
  }
  return <article className="group flex h-full min-w-[88%] snap-start flex-col rounded-2xl border border-gold/25 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-[70%] sm:p-6 md:min-w-0">
   <div className="flex items-start gap-3">
-   {review.photoUrl?<img src={review.photoUrl} alt={`${review.name}'s customer photo`} loading="lazy" className="h-12 w-12 rounded-full object-cover ring-2 ring-gold/30"/>:<div aria-hidden="true" className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-maroon text-sm font-bold text-ivory ring-2 ring-gold/30">{avatarName(review.name)}</div>}
+   {review.photoUrl?<img src={review.photoUrl} alt={`${review.name}'s customer photo`} loading="lazy" className="h-12 w-12 rounded-full object-cover ring-2 ring-gold/30"/>:<div aria-hidden="true" className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-ivory ring-2 ring-gold/30">{avatarName(review.name)}</div>}
    <div className="min-w-0 flex-1"><p className="truncate font-bold">{review.name}</p>{review.verified&&<span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald/10 px-2 py-1 text-xs font-bold text-emerald">✓ Verified Buyer</span>}</div>
    {review.featured&&<span className="rounded-full bg-gold/15 px-2 py-1 text-xs font-bold text-gold-dark">Featured</span>}
   </div>
@@ -93,7 +93,7 @@ function ReviewCard({review,onAction}){
   <p className="mt-2 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-ink/80">{review.description}</p>
   {review.adminResponse&&<div className="mt-4 rounded-lg bg-ivory p-3 text-sm"><p className="font-bold">Shop response</p><p className="mt-1">{review.adminResponse}</p></div>}
   {product&&<Link to={`/product/${product.id}`} className="mt-4 flex items-center gap-3 rounded-xl border border-gold/20 p-2 transition-colors hover:bg-ivory"><Img src={product.images[0]} alt="" tone={product.hex} className="h-12 w-10 rounded object-cover"/><span className="min-w-0"><span className="block text-[11px] uppercase tracking-wide text-ink/60">Purchased</span><span className="block truncate text-sm font-semibold">{product.name}</span></span></Link>}
-  <div className="mt-4 flex items-center justify-between border-t border-gold/20 pt-3"><button type="button" className="min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors hover:bg-ivory disabled:opacity-50" onClick={()=>act('helpful')} disabled={busy}>Helpful 👍 <span className="text-ink/60">({review.helpfulCount})</span></button><button type="button" className="min-h-10 rounded-lg px-2 text-xs text-ink/60 underline hover:text-maroon disabled:opacity-50" onClick={()=>act('report')} disabled={busy}>Report review</button></div>
+  <div className="mt-4 flex items-center justify-between border-t border-gold/20 pt-3"><button type="button" className="min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors hover:bg-ivory disabled:opacity-50" onClick={()=>act('helpful')} disabled={busy}>Helpful 👍 <span className="text-ink/60">({review.helpfulCount})</span></button><button type="button" className="min-h-10 rounded-lg px-2 text-xs text-ink/60 underline hover:text-primary disabled:opacity-50" onClick={()=>act('report')} disabled={busy}>Report review</button></div>
   {actionMessage&&<p role="status" className="mt-2 text-xs text-ink/70">{actionMessage}</p>}
  </article>
 }
@@ -121,7 +121,7 @@ export function CustomerReviews({productId='',productName='',initialName='',init
 
   <div className="mt-7 grid gap-6 rounded-2xl border border-gold/25 bg-white p-5 shadow-sm md:grid-cols-[minmax(230px,.8fr)_1.2fr] md:p-7">
    <div className="flex flex-col justify-center border-b border-gold/20 pb-5 text-center md:border-b-0 md:border-r md:pb-0 md:pr-7">
-    <p className="font-serif text-5xl font-semibold text-maroon">{summary.total?summary.average.toFixed(1):'—'}<span className="text-2xl text-ink/50"> / 5.0</span></p>
+    <p className="font-serif text-5xl font-semibold text-primary">{summary.total?summary.average.toFixed(1):'—'}<span className="text-2xl text-ink/50"> / 5.0</span></p>
     <p className="mt-2 text-2xl tracking-[.2em] text-gold" aria-label={summary.total?`${summary.average.toFixed(1)} out of 5`:'No approved ratings yet'}>{summary.total?stars(Math.round(summary.average)):'☆☆☆☆☆'}</p>
     <p className="mt-2 text-sm text-ink/70">{feed.loading?'Loading customer reviews…':summary.total?`Based on ${summary.total} approved customer ${summary.total===1?'review':'reviews'}`:'No approved customer reviews yet'}</p>
     <p className="mt-4 text-xs font-semibold text-emerald">✓ Moderated customer feedback</p>

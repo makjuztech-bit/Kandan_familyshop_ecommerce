@@ -1,0 +1,12 @@
+# Robots.txt for Kandan Family Shop
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /bridal
+Allow: /collections
+Allow: /about
+Allow: /reviews
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://kandanfamilyshop.com/sitemap.xml

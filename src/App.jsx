@@ -8,6 +8,7 @@ import Admin from './pages/Admin'
 import Checkout from './pages/Checkout'
 import { About, Contact, Policy, NotFound } from './pages/Info'
 import { Account, ForgotPassword, Login, OrderDetails, Register } from './pages/Auth'
+import { CustomerOrders, CustomerDelivery } from './pages/OrdersDelivery'
 import Reviews from './pages/Reviews'
 
 export default function App() {
@@ -27,6 +28,8 @@ export default function App() {
         <Route path="register" element={<Register />} />
         <Route path="forgot-password" element={<ForgotPassword />} />
         <Route path="account" element={<Account />} />
+        <Route path="orders" element={<CustomerOrders />} />
+        <Route path="delivery" element={<CustomerDelivery />} />
         <Route path="order/:orderId" element={<OrderDetails />} />
         <Route path="about" element={<About />} />
         <Route path="contact" element={<Contact />} />
