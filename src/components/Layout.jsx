@@ -1,4 +1,4 @@
-import {useState,useEffect} from 'react'
+﻿import {useState,useEffect} from 'react'
 import {Link,NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
 import {useStore} from '../context/Store'
 import {SHOP} from '../config/shop'
@@ -117,7 +117,7 @@ export default function Layout(){
         {['shipping','returns','privacy','terms'].map(s=><Link key={s} to={'/policy/'+s} className="block py-1.5 text-sm capitalize hover:text-gold">{s}</Link>)}
       </div>
     </Wrap>
-    <p className="border-t border-ivory/20 py-4 text-center text-xs">© {new Date().getFullYear()} {SHOP.name} · Demo website · Sample catalogue, no real orders or payments</p>
+    <p className="border-t border-ivory/20 py-4 text-center text-xs">© {new Date().getFullYear()} {SHOP.name} · All rights reserved</p>
   </footer>
   <BackgroundModal isOpen={showBgModal} onClose={() => setShowBgModal(false)} />
   </>

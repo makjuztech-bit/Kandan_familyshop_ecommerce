@@ -22,7 +22,7 @@ export default function Shop(){const [sp,setSp]=useSearchParams(),[drawer,setDra
   <div><label className={lab} htmlFor={x+'p'}>Maximum price: ₹{f.max.toLocaleString('en-IN')}</label><input id={x+'p'} type="range" min="1500" max="50000" step="500" value={f.max} onChange={e=>set('max',e.target.value)} className="h-11 w-full accent-primary"/></div>
   <label className="flex min-h-11 items-center gap-2"><input type="checkbox" className="h-5 w-5 accent-primary" checked={f.stock} onChange={e=>set('stock',e.target.checked)}/>In stock only</label>
   <button className={btnO+' w-full'} onClick={()=>setSp({})}>Clear filters</button></div>
- return <Wrap className="py-10"><h1 className="text-4xl">Shop Sarees</h1><p className="mt-1 text-sm text-ink/60">Sample catalogue for demonstration. Products are not real stock.</p>
+ return <Wrap className="py-10"><h1 className="text-4xl">Shop Sarees</h1>
   <div className="mt-6 flex items-end justify-between gap-3"><button className={btnO+' lg:hidden'} onClick={()=>setDrawer(true)}>Filters</button><p aria-live="polite" className="hidden text-sm sm:block">{list.length} saree{list.length!==1&&'s'}</p>
    <div className="ml-auto"><label className="mr-2 text-sm font-bold" htmlFor="sort">Sort</label><select id="sort" className="min-h-11 border border-gold-dark/50 bg-white px-2" value={f.sort} onChange={e=>set('sort',e.target.value==='name'?'':e.target.value)}><option value="name">Name A–Z</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select></div></div>
   <div className="mt-6 grid gap-8 lg:grid-cols-[240px_1fr]"><aside className="hidden lg:block" aria-label="Filters"><Filters x="s"/></aside>

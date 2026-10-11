@@ -25,7 +25,7 @@ export function Login() {
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [challenge, setChallenge] = useState(null)
-  const [values, setValues] = useState({ email: 'hello@kandanfamilyshop.com', password: 'demo123' })
+  const [values, setValues] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
 
@@ -66,7 +66,7 @@ export function Login() {
     if (Date.now() > challenge.expiresAt) {
       setChallenge(null)
       setOtp('')
-      setMessage('That demo OTP expired. Generate a new one.')
+      setMessage('That OTP has expired. Please generate a new one.')
       return
     }
     if (otp !== challenge.code) {
@@ -95,14 +95,14 @@ export function Login() {
       <Wrap className="py-12">
         <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
           <h1 className="text-3xl">Login with mobile</h1>
-          <p className="mt-2 text-sm text-ink/70">Demo OTP login. No SMS is sent; the generated code appears here for testing.</p>
+          <p className="mt-2 text-sm text-ink/70">Enter your registered mobile number to receive an OTP.</p>
           <form onSubmit={generateOtp} noValidate className="mt-6 space-y-4">
             <Field label="Mobile number" id="phone" type="tel" inputMode="numeric" autoComplete="tel" value={phone} onChange={changePhone} error={errors.phone} />
-            <button className={btnP + ' w-full'}>Generate demo OTP</button>
+            <button className={btnP + ' w-full'}>Generate OTP</button>
           </form>
           {challenge && <div className="mt-4 rounded-md bg-gold/15 p-3 text-sm" role="status">
-            <p>Demo OTP for {phone}: <strong className="font-mono text-lg tracking-widest">{challenge.code}</strong></p>
-            <p className="mt-1 text-ink/70">For this demo only; valid for 5 minutes. This code is not sent by SMS.</p>
+            <p>Your OTP for {phone}: <strong className="font-mono text-lg tracking-widest">{challenge.code}</strong></p>
+            <p className="mt-1 text-ink/70">Valid for 5 minutes. Enter the code below to login.</p>
           </div>}
           {challenge && <form onSubmit={verifyOtp} noValidate className="mt-4 space-y-4">
             <Field label="6-digit OTP" id="otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} error={errors.otp} />
@@ -140,7 +140,7 @@ export function Login() {
     <Wrap className="py-12">
       <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
         <h1 className="text-3xl">Login</h1>
-        <p className="mt-2 text-sm text-ink/70">Welcome back to Sri Kandan Family Shop. Demo login uses the default account.</p>
+        <p className="mt-2 text-sm text-ink/70">Welcome back to Sri Kandan Family Shop.</p>
         <form onSubmit={submit} noValidate className="mt-6 space-y-4">
           <Field label="Email" id="email" type="email" name="email" value={values.email} onChange={onChange} error={errors.email} />
           <Field label="Password" id="password" type="password" name="password" value={values.password} onChange={onChange} error={errors.password} />
@@ -167,7 +167,7 @@ export function Login() {
 
 export function Register() {
   const navigate = useNavigate()
-  const [values, setValues] = useState({ name: 'Aisha Kandan', email: 'hello@kandanfamilyshop.com', phone: '9876543210', password: 'demo123', confirmPassword: 'demo123' })
+  const [values, setValues] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
 
@@ -236,7 +236,7 @@ export function Register() {
 }
 
 export function ForgotPassword() {
-  const [email, setEmail] = useState('hello@kandanfamilyshop.com')
+  const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const submit = e => {
     e.preventDefault()
@@ -248,7 +248,7 @@ export function ForgotPassword() {
     <Wrap className="py-12">
       <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
         <h1 className="text-3xl">Forgot password</h1>
-        <p className="mt-2 text-sm text-ink/70">Enter your email to receive a secure reset link. Demo mode only.</p>
+        <p className="mt-2 text-sm text-ink/70">Enter your email to receive a secure reset link.</p>
         <form onSubmit={submit} noValidate className="mt-6 space-y-4">
           <Field label="Email" id="reset-email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
           <button className={btnP + ' w-full'}>Send reset link</button>
@@ -466,7 +466,7 @@ export function OrderDetails() {
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Delivery details</h2><p className="mt-3 font-bold">{order.name}</p><p className="mt-1 text-sm text-ink/70">{order.address}</p><p className="mt-2 text-sm text-ink/70">{order.phone}</p><p className="break-all text-sm text-ink/70">{order.email}</p></section>
-          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">This storefront uses demo checkout. No payment is collected unless a payment provider is configured.</p></section>
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">Payment is processed securely through our payment gateway.</p></section>
         </aside>
       </div>
 

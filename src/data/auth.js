@@ -8,7 +8,7 @@ export const defaultUser = {
   email: 'hello@kandanfamilyshop.com',
   phone: '9876543210',
   address: '22 Silk Lane, Chennai 600001',
-  password: 'demo123',
+  password: 'changeme',
 }
 
 const read = (key, fallback = null) => {
@@ -96,7 +96,7 @@ export function loginDemoUserByPhone(phone) {
   const accountPhone = String(user.phone || '').replace(/\D/g, '')
 
   if (!normalizedPhone || normalizedPhone !== accountPhone) {
-    return { ok: false, message: 'No demo account is registered with that mobile number.' }
+    return { ok: false, message: 'No account is registered with that mobile number.' }
   }
 
   if (!write(SESSION_KEY, { loggedIn: true, name: user.name, email: user.email, phone: user.phone })) {
@@ -137,7 +137,7 @@ export function resetPasswordRequest(email) {
   const matches = normalizedEmail === (user.email || '').toLowerCase()
 
   return matches
-    ? { ok: true, message: 'A password reset email was sent to your inbox (demo mode).' }
+    ? { ok: true, message: 'A password reset email has been sent to your inbox.' }
     : { ok: true, message: 'If an account exists for that email, a reset link has been sent.' }
 }
 

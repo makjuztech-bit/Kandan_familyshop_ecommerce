@@ -283,8 +283,8 @@ app.post('/api/order-email', orderEmailLimiter, async (req, res) => {
 
   const transporter = createTransport()
   if (!transporter) {
-    console.warn('Demo mode: Skipping email send because GMAIL_APP_PASSWORD is not configured.')
-    return res.json({ ok: true, message: 'Demo mode: Order notification email skipped.' })
+    console.warn('Email not configured: Skipping order notification email (GMAIL_APP_PASSWORD not set).')
+    return res.json({ ok: true, message: 'Order notification email is not configured. Please set up GMAIL_APP_PASSWORD.' })
   }
 
   const { no, name, email, phone, address, total, items } = req.body

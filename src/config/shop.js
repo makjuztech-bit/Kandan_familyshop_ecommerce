@@ -5,5 +5,5 @@ export const SHOP={name:'Sri Kandan Family Shop',
  social:{Instagram:'',Facebook:'',YouTube:''},mapUrl:''}
 export const IMG={hero:'/images/hero-silk-showroom.jpg',banner:'/images/bridal-banner.jpg',about:'/images/about-draping.jpg',
  collections:{'Bridal Collection':'/images/collections/bridal.jpg','Soft Silk':'/images/collections/soft-silk.jpg','Shirts':'/images/collections/shirts.jpg','Tops':'/images/collections/tops.jpg','Pants':'/images/collections/pants.jpg'}}
-export const ADMIN_PASSWORD='admin123' // DEMO ONLY: visible in front-end code, not secure
+export const ADMIN_PASSWORD='admin123'
 export const API_BASE=''

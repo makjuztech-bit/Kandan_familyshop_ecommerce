@@ -156,7 +156,7 @@ export default function Checkout(){
         if (!savedOrder) throw new Error('Failed to create order on server');
 
         const options = {
-          key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_demo',
+          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
           amount: rzOrder.amount,
           currency: rzOrder.currency,
           name: SHOP.name,
