@@ -117,6 +117,38 @@ export default function Layout(){
       </div>
     </Wrap>
     <p className="border-t border-ivory/20 py-4 text-center text-xs">© {new Date().getFullYear()} {SHOP.name} · All rights reserved</p>
+
+    {/* Grand Premium Textile Showcase Banner at Very Bottom */}
+    <div className="relative isolate w-full overflow-hidden border-t-2 border-gold/40">
+      <div className="relative h-64 sm:h-80 md:h-96 lg:h-[440px] w-full overflow-hidden">
+        <img
+          src="/images/kanchipuram-silk-showcase.jpg"
+          alt="Sri Kandan Family Shop - Premium Kanchipuram Silk Showroom"
+          className="h-full w-full object-cover object-center transform transition-transform duration-700 hover:scale-105"
+          loading="lazy"
+        />
+        {/* Subtle Dark Emerald & Gold Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30" />
+        <div className="absolute inset-0 bg-primary-dark/25 mix-blend-multiply" />
+        <div className="zari absolute top-0 inset-x-0" />
+      </div>
+
+      {/* Floating Centered Branding */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center text-ivory pointer-events-none">
+        <div className="rounded-2xl border border-gold/50 bg-black/60 px-6 py-6 sm:px-12 sm:py-8 backdrop-blur-md shadow-2xl max-w-xl mx-auto pointer-events-auto">
+          <span className="font-serif text-xs sm:text-sm tracking-[0.25em] uppercase text-gold font-bold">
+            Heirloom Handloom Heritage
+          </span>
+          <h2 className="mt-2 font-serif text-2xl sm:text-4xl md:text-5xl font-bold tracking-wide text-ivory drop-shadow-lg">
+            Sri Kandan Family Shop
+          </h2>
+          <div className="zari mx-auto my-3 w-24 sm:w-36" />
+          <p className="font-serif italic text-base sm:text-xl text-gold tracking-wide">
+            “Tradition Woven with Love”
+          </p>
+        </div>
+      </div>
+    </div>
   </footer>
   <BackgroundModal isOpen={showBgModal} onClose={() => setShowBgModal(false)} />
   </>

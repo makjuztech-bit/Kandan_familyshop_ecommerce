@@ -33,6 +33,7 @@ export default function App() {
         <Route path="order/:orderId" element={<OrderDetails />} />
         <Route path="about" element={<About />} />
         <Route path="contact" element={<Contact />} />
+        <Route path="address" element={<Contact />} />
         <Route path="policy/:slug" element={<Policy />} />
         <Route path="*" element={<NotFound />} />
       </Route>

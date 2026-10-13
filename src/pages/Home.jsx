@@ -94,30 +94,47 @@ export default function Home() {
       {/* Visit the shop */}
       <Wrap className="pt-16">
         <section className="rounded-2xl border border-gold/50 bg-white p-6 sm:p-10 shadow-sm">
-          <h2 className="text-3xl font-serif text-primary">Visit Our Store</h2>
-          <dl className="mt-6 grid gap-6 sm:grid-cols-3 text-sm">
-            <div>
-              <dt className="font-bold text-ink">Address</dt>
-              <dd className="mt-1 text-ink/80">{SHOP.address}</dd>
+          <div className="grid gap-8 lg:grid-cols-12 items-center">
+            <div className="lg:col-span-5 overflow-hidden rounded-xl border-2 border-gold/40 shadow-md">
+              <div className="aspect-[4/3] overflow-hidden bg-ivory-dark">
+                <img
+                  src="/images/kandan-family.jpg"
+                  alt="Sri Kandan Family Shop Founders"
+                  className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
+                />
+              </div>
+              <div className="p-3 bg-primary text-ivory text-center border-t border-gold/30">
+                <p className="font-serif text-sm font-bold text-gold">Sri Kandan Family Shop</p>
+                <p className="text-[11px] text-ivory/80 italic">Tradition Woven with Love · Kanchipuram</p>
+              </div>
             </div>
-            <div>
-              <dt className="font-bold text-ink">Phone</dt>
-              <dd className="mt-1 flex flex-col text-ink/80">
-                {SHOP.phones.map((phone) => (
-                  <a key={phone} href={'tel:' + phone} className="hover:text-primary">{phone}</a>
-                ))}
-              </dd>
+            <div className="lg:col-span-7">
+              <h2 className="text-3xl font-serif text-primary">Visit Our Store</h2>
+              <dl className="mt-6 grid gap-6 sm:grid-cols-2 text-sm">
+                <div className="sm:col-span-2">
+                  <dt className="font-bold text-ink">Address</dt>
+                  <dd className="mt-1 text-ink/80 leading-relaxed whitespace-pre-line">{SHOP.address}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-ink">Phone</dt>
+                  <dd className="mt-1 flex flex-col text-ink/80">
+                    {SHOP.phones.map((phone) => (
+                      <a key={phone} href={'tel:' + phone} className="hover:text-primary">{phone}</a>
+                    ))}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-ink">Email</dt>
+                  <dd className="mt-1 text-ink/80">
+                    <a href={'mailto:' + SHOP.email} className="hover:text-primary">{SHOP.email}</a>
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link to="/contact" className={btnP}>Contact Us</Link>
+                <WhatsApp text="Hello Sri Kandan Family Shop, I would like help with choosing products from your catalogue." />
+              </div>
             </div>
-            <div>
-              <dt className="font-bold text-ink">Email</dt>
-              <dd className="mt-1 text-ink/80">
-                <a href={'mailto:' + SHOP.email} className="hover:text-primary">{SHOP.email}</a>
-              </dd>
-            </div>
-          </dl>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link to="/contact" className={btnP}>Contact Us</Link>
-            <WhatsApp text="Hello Sri Kandan Family Shop, I would like help with choosing products from your catalogue." />
           </div>
         </section>
       </Wrap>
