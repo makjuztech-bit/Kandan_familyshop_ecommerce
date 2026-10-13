@@ -96,73 +96,18 @@ export default function QuickViewModal({ product, onClose }) {
 
           {/* Details */}
           <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-bold text-primary">
-                {product.collection}
-              </span>
-              {product.sku && (
-                <span className="text-xs text-ink/50 font-mono tracking-wider">
-                  SKU: {product.sku}
-                </span>
-              )}
-            </div>
-
-            <h2 id="qv-title" className="mt-2 text-2xl font-serif sm:text-3xl font-bold text-ink">
+            <h2 id="qv-title" className="text-2xl font-serif sm:text-3xl font-bold text-ink">
               {product.name}
             </h2>
-
-            <div className="mt-2">
-              <ReviewSummary productId={product.id} />
-            </div>
 
             {/* Price block */}
             <div className="mt-3 flex flex-wrap items-baseline gap-3">
               <span className="font-serif text-3xl font-bold text-primary">{inr(product.price)}</span>
-              {hasDiscount && (
-                <>
-                  <span className="text-lg text-ink/50 line-through">{inr(product.originalPrice)}</span>
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                    {discountPct}% OFF
-                  </span>
-                </>
-              )}
             </div>
 
-            {/* Stock status */}
-            <div className="mt-3 flex items-center gap-2">
-              <span
-                className={`inline-block h-2.5 w-2.5 rounded-full ${
-                  product.stock ? 'bg-emerald-600' : 'bg-red-500'
-                }`}
-              />
-              <span className={`text-sm font-semibold ${product.stock ? 'text-emerald-800' : 'text-red-700'}`}>
-                {product.stock ? `In Stock (${product.stockCount || 10} available)` : 'Out of Stock'}
-              </span>
-            </div>
-
-            <p className="mt-3 text-sm text-ink/80 line-clamp-3 leading-relaxed">
-              {product.description || 'Authentic traditional weave crafted with premium fabrics and exquisite attention to detail.'}
+            <p className="mt-3 text-sm text-ink/80 leading-relaxed">
+              Authentic textile piece handcrafted with exceptional care and quality materials.
             </p>
-
-            <dl className="mt-4 space-y-1.5 border-y border-gold/30 py-3 text-xs sm:text-sm">
-              <div className="flex justify-between">
-                <dt className="font-semibold text-ink/60">Fabric:</dt>
-                <dd className="font-medium text-ink">{product.fabric}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="font-semibold text-ink/60">Colour:</dt>
-                <dd className="flex items-center gap-1.5 font-medium text-ink">
-                  <span className="h-3 w-3 rounded-full border border-black/20" style={{ backgroundColor: product.hex }} />
-                  {product.colour}
-                </dd>
-              </div>
-              {product.length && (
-                <div className="flex justify-between">
-                  <dt className="font-semibold text-ink/60">Length / Size:</dt>
-                  <dd className="font-medium text-ink">{product.length}</dd>
-                </div>
-              )}
-            </dl>
 
             {/* Quantity Selector & Action buttons */}
             <div className="mt-5 space-y-3">

@@ -50,15 +50,11 @@ export default function Product() {
     : [`/images/products/${p.id}-1.jpg`]
 
   const rel = products
-    .filter((x) => x.collection === p.collection && x.id !== p.id)
+    .filter((x) => x.id !== p.id)
     .slice(0, 4)
 
   const isWishlisted = wish.includes(p.id)
-  const originalPrice = Number(p.originalPrice || p.price)
   const price = Number(p.price)
-  const hasDiscount = originalPrice > price
-  const discountPct = p.discount || (hasDiscount ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0)
-  const pointsToEarn = Math.floor((price * qty) / 1000)
 
   const nextImage = () => {
     setActiveImgIndex((prev) => (prev + 1) % images.length)
@@ -76,29 +72,15 @@ export default function Product() {
   }
 
   const handleAddToCart = () => {
-    if (!p.stock) return
     add(p.id, qty)
     setAddedToast(true)
     setTimeout(() => setAddedToast(false), 3000)
   }
 
   const handleBuyNow = () => {
-    if (!p.stock) return
     add(p.id, qty)
     nv('/checkout')
   }
-
-  const specRows = [
-    { label: 'Collection', value: p.collection },
-    { label: 'SKU Code', value: p.sku || `KFS-${p.id.replace('kfs-', '').toUpperCase()}` },
-    { label: 'Primary Colour', value: p.colour },
-    { label: 'Fabric Quality', value: p.fabric || 'Pure Mulberry Silk' },
-    { label: 'Zari / Weave', value: p.zari || 'Pure Traditional Gold Zari' },
-    { label: 'Length / Dimensions', value: p.length || 'Silk Saree: 5.5 m | Blouse: 0.8 m' },
-    { label: 'Blouse Piece', value: p.blouse || 'Contrast unstitched blouse piece included' },
-    { label: 'Care Instructions', value: p.care || 'Dry clean only. Store wrapped in muslin cloth.' },
-    { label: 'Authenticity', value: '100% Handcrafted by Master Weavers · Pure Silk Certified' },
-  ]
 
   return (
     <div className="bg-ivory-dark/20 pb-16">
@@ -108,10 +90,6 @@ export default function Product() {
           <Link to="/" className="hover:text-primary transition-colors">Home</Link>
           <span>/</span>
           <Link to="/shop" className="hover:text-primary transition-colors">Shop</Link>
-          <span>/</span>
-          <Link to={`/category/${encodeURIComponent(p.collection)}`} className="hover:text-primary transition-colors">
-            {p.collection}
-          </Link>
           <span>/</span>
           <span className="font-semibold text-primary truncate max-w-[200px] sm:max-w-xs">{p.name}</span>
         </Wrap>
@@ -143,25 +121,6 @@ export default function Product() {
                     tone={p.hex}
                     className="h-full w-full object-cover"
                   />
-                </div>
-
-                {/* Badges on Main Image */}
-                <div className="absolute left-3 top-3 flex flex-col gap-1.5 z-10 pointer-events-none">
-                  {hasDiscount && (
-                    <span className="rounded-full bg-emerald-700 px-3 py-1 text-xs font-bold text-white shadow">
-                      {discountPct}% OFF
-                    </span>
-                  )}
-                  {p.best && (
-                    <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-ivory shadow">
-                      ★ Bestseller
-                    </span>
-                  )}
-                  {p.isNew && (
-                    <span className="rounded-full bg-gold px-3 py-1 text-xs font-bold text-primary shadow">
-                      ✦ New Arrival
-                    </span>
-                  )}
                 </div>
 
                 {/* Zoom Hint Overlay */}
@@ -230,21 +189,21 @@ export default function Product() {
               </div>
             )}
 
-            {/* Quality & Craftsmanship Guarantee Callout */}
+            {/* Authentic Craftsmanship Guarantee */}
             <div className="grid grid-cols-3 gap-3 rounded-xl border border-gold/40 bg-white p-4 text-center text-xs shadow-sm">
               <div className="space-y-1">
                 <span className="text-xl">✨</span>
-                <p className="font-bold text-primary">100% Pure Silk</p>
-                <p className="text-ink/60 text-[10px]">Authentic mulberry silk guarantee</p>
+                <p className="font-bold text-primary">Authentic Weave</p>
+                <p className="text-ink/60 text-[10px]">Pure craftsmanship guarantee</p>
               </div>
               <div className="space-y-1 border-x border-gold/30 px-2">
                 <span className="text-xl">🏛️</span>
                 <p className="font-bold text-primary">Handcrafted</p>
-                <p className="text-ink/60 text-[10px]">Woven on traditional pit-looms</p>
+                <p className="text-ink/60 text-[10px]">Direct from traditional master weavers</p>
               </div>
               <div className="space-y-1">
                 <span className="text-xl">🚚</span>
-                <p className="font-bold text-primary">Free Express Delivery</p>
+                <p className="font-bold text-primary">Express Delivery</p>
                 <p className="text-ink/60 text-[10px]">Insured packaging across India</p>
               </div>
             </div>
@@ -253,15 +212,6 @@ export default function Product() {
           {/* ── Right Column: Product Info & Purchase Actions ── */}
           <div className="lg:col-span-5 space-y-6">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                  {p.collection}
-                </span>
-                <span className="font-mono text-xs text-ink/50">
-                  SKU: {p.sku || `KFS-${p.id.replace('kfs-', '').toUpperCase()}`}
-                </span>
-              </div>
-
               <h1 className="font-serif text-3xl sm:text-4xl text-primary font-bold leading-tight">
                 {p.name}
               </h1>
@@ -281,47 +231,10 @@ export default function Product() {
                 <span className="font-serif text-3xl sm:text-4xl font-bold text-primary">
                   {inr(price)}
                 </span>
-                {hasDiscount && (
-                  <>
-                    <span className="text-lg text-ink/40 line-through">
-                      {inr(originalPrice)}
-                    </span>
-                    <span className="rounded-md bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                      Save {inr(originalPrice - price)} ({discountPct}% OFF)
-                    </span>
-                  </>
-                )}
               </div>
-
               <p className="text-xs text-ink/60">
-                Inclusive of all taxes. Free shipping on all domestic orders.
+                Inclusive of all taxes. Free shipping on all domestic orders across India.
               </p>
-
-              {/* Loyalty Reward Preview */}
-              <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-3 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">💎</span>
-                  <div>
-                    <span className="font-bold text-emerald-900">Loyalty Rewards</span>
-                    <p className="text-emerald-700">
-                      Earn <strong>{pointsToEarn} points</strong> (worth {inr(pointsToEarn)})
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded bg-emerald-200 px-2 py-0.5 font-bold text-emerald-900 text-[11px]">
-                  Automatic Credit
-                </span>
-              </div>
-            </div>
-
-            {/* Stock Availability */}
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className={`inline-block h-3 w-3 rounded-full ${p.stock ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className={p.stock ? 'text-emerald-800' : 'text-red-700'}>
-                {p.stock
-                  ? `In Stock — Ready for dispatch (${p.stockCount || 8} units available)`
-                  : 'Currently Out of Stock'}
-              </span>
             </div>
 
             {/* Quantity Selector & Add to Cart */}
@@ -334,7 +247,7 @@ export default function Product() {
                   <button
                     type="button"
                     onClick={() => setQty(Math.max(1, qty - 1))}
-                    disabled={qty <= 1 || !p.stock}
+                    disabled={qty <= 1}
                     className="h-11 w-11 text-lg font-bold hover:bg-ivory transition-colors disabled:opacity-40"
                     aria-label="Decrease quantity"
                   >
@@ -346,7 +259,7 @@ export default function Product() {
                   <button
                     type="button"
                     onClick={() => setQty(Math.min(10, qty + 1))}
-                    disabled={qty >= 10 || !p.stock}
+                    disabled={qty >= 10}
                     className="h-11 w-11 text-lg font-bold hover:bg-ivory transition-colors disabled:opacity-40"
                     aria-label="Increase quantity"
                   >
@@ -360,7 +273,6 @@ export default function Product() {
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={!p.stock}
                   className={btnP + ' py-4 text-base font-bold shadow-md hover:shadow-lg transition-all'}
                 >
                   🛒 Add to Cart
@@ -368,7 +280,6 @@ export default function Product() {
                 <button
                   type="button"
                   onClick={handleBuyNow}
-                  disabled={!p.stock}
                   className="inline-flex min-h-11 items-center justify-center rounded-lg bg-gold px-6 py-4 text-base font-bold text-primary hover:bg-gold-dark hover:text-ivory shadow-md transition-all disabled:opacity-50"
                 >
                   ⚡ Buy Now
@@ -388,7 +299,7 @@ export default function Product() {
                 </button>
                 <WhatsApp
                   label="Enquire on WhatsApp"
-                  text={`Hello Sri Kandan Family Shop, I would like to enquire about ${p.name} (SKU: ${p.sku || p.id}). Is this available?`}
+                  text={`Hello Sri Kandan Family Shop, I would like to enquire about ${p.name}. Is this available?`}
                 />
               </div>
 
@@ -397,32 +308,6 @@ export default function Product() {
                   ✓ Successfully added {qty} item{qty > 1 ? 's' : ''} to your Cart!
                 </div>
               )}
-            </div>
-
-            {/* Description & Story */}
-            <div className="rounded-2xl border border-gold/40 bg-white p-6 shadow-sm space-y-4">
-              <h3 className="font-serif text-xl font-bold text-primary border-b border-gold/20 pb-2">
-                Product Story & Details
-              </h3>
-              <p className="text-sm text-ink/80 leading-relaxed">
-                {p.description ||
-                  `Handcrafted heirloom ${p.collection} from Sri Kandan Family Shop. Woven using authentic mulberry silk and rich zari, reflecting centuries-old handloom weaving traditions. Ideal for grand weddings, festive celebrations, and heirloom keepsakes.`}
-              </p>
-
-              {/* Specifications Table */}
-              <div className="pt-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-dark mb-3">
-                  Specifications & Fabric Details
-                </h4>
-                <dl className="divide-y divide-gold/20 text-xs">
-                  {specRows.map((spec) => (
-                    <div key={spec.label} className="grid grid-cols-[130px_1fr] gap-3 py-2.5">
-                      <dt className="font-bold text-ink/70">{spec.label}</dt>
-                      <dd className="font-medium text-ink">{spec.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
             </div>
           </div>
         </div>
@@ -492,7 +377,7 @@ export default function Product() {
         {rel.length > 0 && (
           <section className="mt-20 border-t border-gold/40 pt-12">
             <div className="text-center mb-8">
-              <span className="text-xs uppercase tracking-widest text-gold-dark font-bold">More from this collection</span>
+              <span className="text-xs uppercase tracking-widest text-gold-dark font-bold">More from our collection</span>
               <h2 className="text-3xl font-serif text-primary mt-1">You May Also Cherish</h2>
               <div className="zari mx-auto mt-3 w-20" />
             </div>

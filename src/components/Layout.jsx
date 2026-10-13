@@ -1,4 +1,4 @@
-﻿import {useState,useEffect} from 'react'
+import {useState,useEffect} from 'react'
 import {Link,NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
 import {useStore} from '../context/Store'
 import {SHOP} from '../config/shop'
@@ -11,7 +11,6 @@ import { LoyaltyHeaderBadge } from './LoyaltyWidget'
 const nav=[
   ['/','Home'],
   ['/shop','Shop'],
-  ['/category/Soft%20Silk','Collections'],
   ['/reviews','Reviews'],
   ['/about','About'],
   ['/contact','Contact'],

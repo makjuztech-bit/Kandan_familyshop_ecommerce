@@ -47,10 +47,18 @@ const seed = rawProducts.map((p) => {
 
 const seedById = Object.fromEntries(seed.map((p) => [p.id, p]))
 
-const KEY = 'kfs_catalog_v2'
+const KEY = 'kfs_catalog_v3'
 const IK = 'kfs_site_images'
 const subs = new Set()
 const D = structuredClone(IMG)
+
+// Clear legacy cached catalogs from older versions
+if (typeof localStorage !== 'undefined') {
+  try {
+    localStorage.removeItem('kfs_catalog')
+    localStorage.removeItem('kfs_catalog_v2')
+  } catch {}
+}
 
 const rd = (k, d) => {
   try {
@@ -101,7 +109,12 @@ function load(serverProducts = null, serverSettings = null) {
   let list = serverProducts
   if (!list) {
     const cached = rd(KEY, null)
-    list = Array.isArray(cached) && cached.length > 0 ? cached : seed
+    // Only accept cached list if it matches the current 27-product catalog
+    if (Array.isArray(cached) && cached.length === seed.length && cached.every((p) => seedById[p.id])) {
+      list = cached
+    } else {
+      list = seed
+    }
   }
 
   const sanitized = list.map(sanitizeProduct).filter(Boolean)

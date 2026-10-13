@@ -25,37 +25,17 @@ export const Title=({children,sub})=><div className="mb-8 text-center"><h2 class
 export function ProductCard({p}){
   const {wish,toggleWish,add}=useStore(),on=wish.includes(p.id),nv=useNavigate()
   const imgSrc = p.images?.[0] || `/images/products/${p.id}-1.jpg`
-  const hasDiscount = p.originalPrice && Number(p.originalPrice) > Number(p.price)
-  const discountPct = p.discount || (hasDiscount ? Math.round(((Number(p.originalPrice) - Number(p.price)) / Number(p.originalPrice)) * 100) : 0)
 
   return (
     <article className="group relative flex flex-col h-full rounded-2xl bg-white border border-gold/30 p-3.5 shadow-sm hover:shadow-lg hover:border-gold/70 transition-all duration-300">
       <Link to={'/product/'+p.id} className="block flex-1">
         <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-ivory-dark">
           <Img src={imgSrc} alt={p.name} tone={p.hex} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"/>
-          {hasDiscount && (
-            <span className="absolute left-2.5 top-2.5 rounded-full bg-emerald-700 px-2.5 py-0.5 text-[11px] font-bold text-white shadow">
-              {discountPct}% OFF
-            </span>
-          )}
         </div>
         <div className="pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gold-dark">{p.collection}</p>
           <h3 className="mt-1 text-base font-serif font-bold text-ink leading-snug line-clamp-2 group-hover:text-primary transition-colors">{p.name}</h3>
-          <div className="mt-1.5"><ReviewSummary productId={p.id}/></div>
-          <div className="mt-2 flex items-baseline gap-2">
+          <div className="mt-2.5">
             <span className="text-lg font-bold text-primary font-serif">{inr(p.price)}</span>
-            {hasDiscount && (
-              <span className="text-xs text-ink/40 line-through">{inr(p.originalPrice)}</span>
-            )}
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs">
-            <span className={`font-semibold ${p.stock ? 'text-emerald-700' : 'text-red-600'}`}>
-              {p.stock ? '✓ In Stock' : 'Out of stock'}
-            </span>
-            <span className="rounded bg-emerald-50 px-2 py-0.5 font-bold text-emerald-800 text-[11px]">
-              💎 +{Math.floor(p.price/1000)} pts
-            </span>
           </div>
         </div>
       </Link>
@@ -63,7 +43,7 @@ export function ProductCard({p}){
         <Link to={'/product/'+p.id} className="inline-flex min-h-[38px] items-center justify-center rounded-lg bg-ivory text-xs font-bold text-primary border border-primary/50 hover:bg-primary hover:text-ivory transition-colors">
           View Details
         </Link>
-        <button onClick={(e)=>{e.preventDefault();if(p.stock){add(p.id,1);nv('/checkout')}}} disabled={!p.stock} className="inline-flex min-h-[38px] items-center justify-center rounded-lg bg-primary text-xs font-bold text-ivory hover:bg-primary-dark transition-colors disabled:opacity-50 shadow-sm">
+        <button onClick={(e)=>{e.preventDefault();add(p.id,1);nv('/checkout')}} className="inline-flex min-h-[38px] items-center justify-center rounded-lg bg-primary text-xs font-bold text-ivory hover:bg-primary-dark transition-colors shadow-sm">
           Buy Now
         </button>
       </div>
