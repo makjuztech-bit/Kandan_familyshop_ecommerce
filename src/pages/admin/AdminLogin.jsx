@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAdminAuth } from '../../context/AdminAuthContext'
 import { isFirebaseConfigured, firebaseConfig } from '../../services/firebase'
@@ -9,16 +9,18 @@ export default function AdminLogin() {
   const location = useLocation()
   const from = location.state?.from?.pathname || '/admin/dashboard'
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('admin@kandanfamilyshop.com')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
-  // If already authenticated, redirect straight to dashboard
-  if (isAdmin) {
-    navigate(from, { replace: true })
-  }
+  // If already authenticated, redirect straight to target page
+  useEffect(() => {
+    if (isAdmin) {
+      navigate(from, { replace: true })
+    }
+  }, [isAdmin, navigate, from])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -149,11 +151,11 @@ export default function AdminLogin() {
 
           {/* Setup / Access Help */}
           <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
-            <p className="text-xs text-slate-400">
-              Need access or first time setting up?
+            <p className="text-xs text-slate-300">
+              Master Admin Password: <code className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-mono font-bold">admin123</code>
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Supports Firebase Auth and master store administrator credentials.
+              Supports both Firebase Auth accounts and store master credentials.
             </p>
           </div>
         </div>

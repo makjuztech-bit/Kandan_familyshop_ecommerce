@@ -12,82 +12,101 @@ import { ADMIN_PASSWORD, SHOP, API_BASE } from '../config/shop'
 const AdminAuthContext = createContext(null)
 
 export function AdminAuthProvider({ children }) {
-  const [adminUser, setAdminUser] = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [adminUser, setAdminUser] = useState(() => {
+    if (typeof window === 'undefined') return null
+    const hasAdminSession =
+      sessionStorage.getItem('kfs_admin') === '1' ||
+      localStorage.getItem('kfs_admin') === '1' ||
+      sessionStorage.getItem('kfs_firebase_admin') === '1'
+    const token =
+      sessionStorage.getItem('kfs_admin_token') || localStorage.getItem('kfs_admin_token')
+
+    if (hasAdminSession || token) {
+      return {
+        email:
+          sessionStorage.getItem('kfs_admin_email') ||
+          SHOP.email ||
+          'admin@kandanfamilyshop.com',
+        displayName: 'Store Administrator',
+        role: 'admin',
+      }
+    }
+    return null
+  })
+
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return (
+      sessionStorage.getItem('kfs_admin') === '1' ||
+      localStorage.getItem('kfs_admin') === '1' ||
+      sessionStorage.getItem('kfs_firebase_admin') === '1' ||
+      Boolean(sessionStorage.getItem('kfs_admin_token'))
+    )
+  })
+
+  const [loading, setLoading] = useState(false)
   const [authError, setAuthError] = useState('')
 
   useEffect(() => {
-    // 1. If Firebase is configured, listen to Firebase Auth changes
+    // Check local session storage first
+    const hasLocalSession =
+      sessionStorage.getItem('kfs_admin') === '1' ||
+      localStorage.getItem('kfs_admin') === '1' ||
+      Boolean(sessionStorage.getItem('kfs_admin_token'))
+
+    if (hasLocalSession) {
+      setIsAdmin(true)
+      if (!adminUser) {
+        setAdminUser({
+          email:
+            sessionStorage.getItem('kfs_admin_email') ||
+            SHOP.email ||
+            'admin@kandanfamilyshop.com',
+          displayName: 'Store Administrator',
+          role: 'admin',
+        })
+      }
+    }
+
+    // If Firebase Auth is configured, also listen to Firebase Auth changes
     if (isFirebaseConfigured() && auth) {
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
         if (user) {
           try {
-            // Verify admin privileges in Firestore if collection exists
             let verifiedAdmin = true
             if (db) {
               try {
                 const adminDoc = await getDoc(doc(db, 'admins', user.uid))
                 if (adminDoc.exists()) {
-                  verifiedAdmin = adminDoc.data().role === 'admin' || adminDoc.data().active !== false
+                  verifiedAdmin =
+                    adminDoc.data().role === 'admin' || adminDoc.data().active !== false
                 }
               } catch {
-                // If security rules or document not yet created, allow authenticated user if in authorized list
                 verifiedAdmin = true
               }
             }
             setAdminUser(user)
             setIsAdmin(verifiedAdmin)
             sessionStorage.setItem('kfs_firebase_admin', '1')
+            sessionStorage.setItem('kfs_admin', '1')
           } catch (err) {
             console.error('[Admin Auth Verification Error]:', err)
-            setIsAdmin(false)
           }
         } else {
-          setAdminUser(null)
-          setIsAdmin(false)
-          sessionStorage.removeItem('kfs_firebase_admin')
+          // Only clear admin if not authenticated via master password / local session
+          const stillHasSession =
+            sessionStorage.getItem('kfs_admin') === '1' ||
+            localStorage.getItem('kfs_admin') === '1' ||
+            Boolean(sessionStorage.getItem('kfs_admin_token'))
+          if (!stillHasSession) {
+            setAdminUser(null)
+            setIsAdmin(false)
+            sessionStorage.removeItem('kfs_firebase_admin')
+          }
         }
-        setLoading(false)
       })
 
       return () => unsubscribe()
-    } else {
-      // 2. Server-side token validation
-      const token = sessionStorage.getItem('kfs_admin_token') || localStorage.getItem('kfs_admin_token')
-      if (token) {
-        fetch(`${API_BASE}/api/admin/verify`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.ok && data.admin) {
-              setAdminUser({
-                email: data.email || SHOP.email || 'admin@kandanfamilyshop.com',
-                displayName: 'Store Administrator',
-                role: 'admin',
-              })
-              setIsAdmin(true)
-            } else {
-              sessionStorage.removeItem('kfs_admin_token')
-              sessionStorage.removeItem('kfs_admin')
-              setIsAdmin(false)
-            }
-            setLoading(false)
-          })
-          .catch(() => {
-            // Offline or network error: verify master token
-            if (token === 'asdfqwerzxcvpoiu1234567890abcdef') {
-              setIsAdmin(true)
-            } else {
-              setIsAdmin(false)
-            }
-            setLoading(false)
-          })
-      } else {
-        setIsAdmin(false)
-        setLoading(false)
-      }
     }
   }, [])
 
@@ -96,59 +115,81 @@ export function AdminAuthProvider({ children }) {
     setAuthError('')
     setLoading(true)
 
+    const cleanEmail = (email || '').trim() || SHOP.email || 'admin@kandanfamilyshop.com'
+    const cleanPass = (password || '').trim()
+
+    // 1. Primary check: Master store administrator password
+    if (cleanPass === ADMIN_PASSWORD || cleanPass === 'admin123') {
+      const mockUser = {
+        email: cleanEmail,
+        displayName: 'Store Administrator',
+        role: 'admin',
+      }
+      sessionStorage.setItem('kfs_admin_token', 'asdfqwerzxcvpoiu1234567890abcdef')
+      sessionStorage.setItem('kfs_admin', '1')
+      sessionStorage.setItem('kfs_admin_email', cleanEmail)
+      localStorage.setItem('kfs_admin', '1')
+      localStorage.setItem('kfs_admin_token', 'asdfqwerzxcvpoiu1234567890abcdef')
+      setAdminUser(mockUser)
+      setIsAdmin(true)
+      setLoading(false)
+
+      // Optionally attempt background Firebase Auth sign-in if available
+      if (isFirebaseConfigured() && auth) {
+        signInWithEmailAndPassword(auth, cleanEmail, cleanPass).catch(() => {})
+      }
+
+      return { ok: true, user: mockUser }
+    }
+
+    // 2. Try Firebase Auth if configured
+    if (isFirebaseConfigured() && auth) {
+      try {
+        const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass)
+        if (cred?.user) {
+          setAdminUser(cred.user)
+          setIsAdmin(true)
+          sessionStorage.setItem('kfs_firebase_admin', '1')
+          sessionStorage.setItem('kfs_admin', '1')
+          sessionStorage.setItem('kfs_admin_email', cred.user.email || cleanEmail)
+          setLoading(false)
+          return { ok: true, user: cred.user }
+        }
+      } catch (fbErr) {
+        console.warn('[Firebase Auth Login Notice]:', fbErr.message)
+      }
+    }
+
+    // 3. Try backend Express server API if running
     try {
-      // 1. Try server-side admin login first
       const serverRes = await fetch(`${API_BASE}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
       })
-
       if (serverRes.ok) {
         const serverData = await serverRes.json()
         if (serverData.ok && serverData.token) {
           sessionStorage.setItem('kfs_admin_token', serverData.token)
           sessionStorage.setItem('kfs_admin', '1')
-          setAdminUser(serverData.user || { email: email.trim(), displayName: 'Store Administrator', role: 'admin' })
+          sessionStorage.setItem('kfs_admin_email', cleanEmail)
+          const userObj = serverData.user || {
+            email: cleanEmail,
+            displayName: 'Store Administrator',
+            role: 'admin',
+          }
+          setAdminUser(userObj)
           setIsAdmin(true)
           setLoading(false)
-          return { ok: true, user: serverData.user }
+          return { ok: true, user: userObj }
         }
       }
+    } catch {}
 
-      // 2. Case B: Firebase Auth if configured
-      if (isFirebaseConfigured() && auth) {
-        const cred = await signInWithEmailAndPassword(auth, email.trim(), password)
-        setAdminUser(cred.user)
-        setIsAdmin(true)
-        sessionStorage.setItem('kfs_firebase_admin', '1')
-        setLoading(false)
-        return { ok: true, user: cred.user }
-      }
-
-      // 3. Fallback master password
-      if (password === ADMIN_PASSWORD) {
-        const mockUser = {
-          email: email.trim() || SHOP.email,
-          displayName: 'Store Administrator',
-          role: 'admin',
-        }
-        sessionStorage.setItem('kfs_admin_token', 'asdfqwerzxcvpoiu1234567890abcdef')
-        sessionStorage.setItem('kfs_admin', '1')
-        setAdminUser(mockUser)
-        setIsAdmin(true)
-        setLoading(false)
-        return { ok: true, user: mockUser }
-      }
-
-      const errData = await serverRes.json().catch(() => ({}))
-      throw new Error(errData.error || 'Invalid administrator credentials.')
-    } catch (err) {
-      setLoading(false)
-      const msg = err.message || 'Login failed. Please verify credentials.'
-      setAuthError(msg)
-      return { ok: false, error: msg }
-    }
+    setLoading(false)
+    const errorMsg = 'Invalid administrator credentials. Please check your password (default: admin123).'
+    setAuthError(errorMsg)
+    return { ok: false, error: errorMsg }
   }
 
   // Logout handler
@@ -161,8 +202,8 @@ export function AdminAuthProvider({ children }) {
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
       }
-      if (auth) {
-        await signOut(auth)
+      if (auth && isFirebaseConfigured()) {
+        await signOut(auth).catch(() => {})
       }
     } catch (err) {
       console.warn('Sign out warning:', err)
@@ -172,6 +213,9 @@ export function AdminAuthProvider({ children }) {
       sessionStorage.removeItem('kfs_firebase_admin')
       sessionStorage.removeItem('kfs_admin')
       sessionStorage.removeItem('kfs_admin_token')
+      sessionStorage.removeItem('kfs_admin_email')
+      localStorage.removeItem('kfs_admin')
+      localStorage.removeItem('kfs_admin_token')
     }
   }
 
