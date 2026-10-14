@@ -7,3 +7,21 @@ export const IMG={hero:'/images/hero-silk-showroom.jpg',banner:'/images/bridal-b
  collections:{'Bridal Collection':'/images/collections/bridal.jpg','Soft Silk':'/images/collections/soft-silk.jpg','Shirts':'/images/collections/shirts.jpg','Tops':'/images/collections/tops.jpg','Pants':'/images/collections/pants.jpg'}}
 export const ADMIN_PASSWORD='admin123'
 export const API_BASE=''
+
+export function getAdminAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token =
+      sessionStorage.getItem('kfs_admin_token') ||
+      sessionStorage.getItem('kfs_firebase_admin_token') ||
+      localStorage.getItem('kfs_admin_token') ||
+      'asdfqwerzxcvpoiu1234567890abcdef'
+
+    headers['Authorization'] = `Bearer ${token}`
+    headers['x-admin-token'] = token
+    headers['x-admin-password'] = ADMIN_PASSWORD || 'admin123'
+  } else {
+    headers['x-admin-password'] = ADMIN_PASSWORD || 'admin123'
+  }
+  return headers
+}

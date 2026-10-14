@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useBackgroundImage, setBackgroundImage, resetBackgroundImage, DEFAULT_BACKGROUND } from '../data/background'
 import { btnP, btnO } from './ui'
+import { getAdminAuthHeaders } from '../config/shop'
 
 const PRESETS = [
   { name: 'Kanchipuram Silk Showroom (Default)', url: DEFAULT_BACKGROUND },
@@ -66,7 +67,7 @@ export default function BackgroundModal({ isOpen, onClose }) {
       // Upload to server and Supabase storage
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({
           file: dataUrl,
           filename: file.name,

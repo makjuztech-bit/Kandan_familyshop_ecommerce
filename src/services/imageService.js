@@ -19,7 +19,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { db, storage, isFirebaseConfigured } from './firebase'
-import { IMG } from '../config/shop'
+import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
 import { setBackgroundImage } from '../data/background'
 
 export const IMAGE_CATEGORIES = [

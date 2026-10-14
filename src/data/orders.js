@@ -1,28 +1,10 @@
 import {useSyncExternalStore} from 'react'
-import { API_BASE } from '../config/shop'
+import { API_BASE, getAdminAuthHeaders } from '../config/shop'
 
 let list = []
 let loaded = false
 const subs = new Set()
-
 const emit = () => subs.forEach(f => f())
-
-// Moved below useOrders
-let initialLoadDone = false;
-
-function getAdminAuthHeaders() {
-  const headers = { 'Content-Type': 'application/json' }
-  if (typeof window !== 'undefined') {
-    const token =
-      sessionStorage.getItem('kfs_admin_token') ||
-      sessionStorage.getItem('kfs_firebase_admin_token') ||
-      localStorage.getItem('kfs_admin_token')
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  }
-  return headers
-}
 
 export async function addOrder(orderData) {
   try {

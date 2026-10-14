@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { IMG, API_BASE } from '../config/shop'
+import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
 import rawProducts from './raw-products.json'
 
 export const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN')
@@ -200,19 +200,7 @@ const saveLocal = (k, v) => {
   }
 }
 
-function getAdminAuthHeaders() {
-  const headers = { 'Content-Type': 'application/json' }
-  if (typeof window !== 'undefined') {
-    const token =
-      sessionStorage.getItem('kfs_admin_token') ||
-      sessionStorage.getItem('kfs_firebase_admin_token') ||
-      localStorage.getItem('kfs_admin_token')
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  }
-  return headers
-}
+
 
 export async function saveProduct(p) {
   const sanitized = sanitizeProduct(p)
@@ -324,8 +312,8 @@ export async function resetCatalog() {
   localStorage.removeItem(IK)
 
   try {
-    await fetch(`${API_BASE}/api/products/reset`, { method: 'POST' })
-    await fetch(`${API_BASE}/api/settings/reset`, { method: 'POST' })
+    await fetch(`${API_BASE}/api/products/reset`, { method: 'POST', headers: getAdminAuthHeaders() })
+    await fetch(`${API_BASE}/api/settings/reset`, { method: 'POST', headers: getAdminAuthHeaders() })
   } catch {}
 
   load(seed, D)

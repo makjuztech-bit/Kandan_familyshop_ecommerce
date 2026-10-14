@@ -2,7 +2,7 @@ import {useState} from 'react'
 import {Link} from 'react-router-dom'
 import {products,COLLECTIONS,HEX,inr,saveProduct,deleteProduct,resetCatalog,useCatalog,setSiteImage,siteImg} from '../data/products'
 import {useOrders,updateOrder,deleteOrder,loadOrders} from '../data/orders'
-import {ADMIN_PASSWORD,SHOP,API_BASE} from '../config/shop'
+import {ADMIN_PASSWORD,SHOP,API_BASE,getAdminAuthHeaders} from '../config/shop'
 import {isSupabaseConfigured} from '../lib/supabase'
 import {setBackgroundImage, resetBackgroundImage, DEFAULT_BACKGROUND} from '../data/background'
 import {Img,Field,WhatsApp,btnP,btnO} from '../components/ui'
@@ -78,14 +78,10 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
       })
 
       // Send to /api/upload
-      const adminToken = sessionStorage.getItem('kfs_admin_token') || ''
       const uploadEndpoint = `${API_BASE || ''}/api/upload`
       const res = await fetch(uploadEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-        },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({
           file: dataUrl,
           filename: file.name,

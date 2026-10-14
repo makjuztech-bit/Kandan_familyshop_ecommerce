@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { IMG, API_BASE } from '../config/shop'
+import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
 
 export const DEFAULT_BACKGROUND = '/images/hero-silk-showroom.jpg'
 const STORAGE_KEY = 'kfs_website_background'
@@ -212,12 +212,12 @@ export async function setBackgroundImage(newImage) {
     await Promise.all([
       fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'background', value: cleanImage }),
       }),
       fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'hero', value: cleanImage }),
       }),
     ])
@@ -250,12 +250,12 @@ export async function resetBackgroundImage() {
     await Promise.all([
       fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'background', value: DEFAULT_BACKGROUND }),
       }),
       fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'hero', value: DEFAULT_BACKGROUND }),
       }),
     ])
