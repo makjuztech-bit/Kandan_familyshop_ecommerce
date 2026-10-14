@@ -45,7 +45,66 @@ export const WEBSITE_SECTIONS = [
 ]
 
 /**
+ * Optimizes an image file or dataURL client-side using an HTML5 Canvas.
+ * Produces a high-quality compressed JPEG with max dimensions (1600px).
+ */
+export async function optimizeImageClient(fileOrDataUrl, maxDimension = 1600, quality = 0.86) {
+  return new Promise((resolve, reject) => {
+    let src = ''
+    if (typeof fileOrDataUrl === 'string') {
+      src = fileOrDataUrl
+    } else if (fileOrDataUrl instanceof Blob || fileOrDataUrl instanceof File) {
+      const reader = new FileReader()
+      reader.onload = () => processImage(reader.result)
+      reader.onerror = () => reject(new Error('Could not read image file'))
+      reader.readAsDataURL(fileOrDataUrl)
+      return
+    } else {
+      return reject(new Error('Invalid image input'))
+    }
+
+    processImage(src)
+
+    function processImage(rawUrl) {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const width = img.naturalWidth || img.width
+          const height = img.naturalHeight || img.height
+          const scale = Math.min(1, maxDimension / Math.max(width, height))
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.round(width * scale)
+          canvas.height = Math.round(height * scale)
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+          const dataUrl = canvas.toDataURL('image/jpeg', quality)
+          canvas.toBlob(
+            (blob) => {
+              resolve({
+                dataUrl,
+                blob,
+                width: canvas.width,
+                height: canvas.height,
+                size: blob ? blob.size : dataUrl.length,
+              })
+            },
+            'image/jpeg',
+            quality
+          )
+        } catch {
+          resolve({ dataUrl: rawUrl, blob: null, size: rawUrl.length })
+        }
+      }
+      img.onerror = () => resolve({ dataUrl: rawUrl, blob: null, size: rawUrl.length })
+      img.src = rawUrl
+    }
+  })
+}
+
+/**
  * Upload an image to Firebase Storage and record its metadata in Firestore.
+ * Automatically falls back to Firestore persistent storage if Storage bucket is uninitialized.
  */
 export async function uploadImageToFirebase({
   file,
@@ -57,75 +116,132 @@ export async function uploadImageToFirebase({
 }) {
   if (!file) throw new Error('No file provided for upload.')
 
-  // Check if Firebase is available
-  if (!isFirebaseConfigured() || !storage || !db) {
-    return uploadFallbackLocalImage({ file, title, category, description, targetKey, onProgress })
+  // 1. Validate file format
+  const validExtensions = /\.(jpe?g|png|webp|jfif|avif|heic)$/i
+  const isImageMime = file.type ? file.type.startsWith('image/') : false
+  const isImageExt = file.name ? validExtensions.test(file.name) : true
+
+  if (!isImageMime && !isImageExt && typeof file !== 'string') {
+    throw new Error('Please select a valid image file (JPG, PNG, WebP).')
   }
 
-  // Generate unique filename with timestamp to prevent stale browser caching
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+  // 2. Validate file size (15 MB max before client-side optimization)
+  if (file.size && file.size > 15 * 1024 * 1024) {
+    throw new Error('Image file must be 15 MB or smaller.')
+  }
+
+  onProgress(10)
+
+  // 3. Optimize image client-side to ensure lightweight transmission and fast delivery
+  const optimized = await optimizeImageClient(file, targetKey === 'hero' ? 1920 : 1600, 0.86)
+  onProgress(35)
+
+  let downloadUrl = null
+  let storagePath = null
+  const sanitizedName = file.name ? file.name.replace(/[^a-zA-Z0-9.-]/g, '_') : 'image.jpg'
   const timestamp = Date.now()
-  const storagePath = `website-images/${category.toLowerCase().replace(/\s+/g, '-')}/${timestamp}_${sanitizedName}`
-  const storageRef = ref(storage, storagePath)
 
-  return new Promise((resolve, reject) => {
-    const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: file.type,
-      customMetadata: {
-        title: title || file.name,
+  // 4. Attempt upload to Firebase Storage if bucket is configured
+  if (isFirebaseConfigured() && storage) {
+    try {
+      storagePath = `website-images/${category.toLowerCase().replace(/\s+/g, '-')}/${timestamp}_${sanitizedName}`
+      const storageRef = ref(storage, storagePath)
+      const uploadPayload = optimized.blob || file
+
+      const uploadTask = uploadBytesResumable(storageRef, uploadPayload, {
+        contentType: 'image/jpeg',
+        customMetadata: {
+          title: title || file.name || 'Image',
+          category,
+          uploadedAt: new Date().toISOString(),
+        },
+      })
+
+      await new Promise((res, rej) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 60) + 35
+            onProgress(Math.min(95, progress))
+          },
+          (err) => rej(err),
+          async () => {
+            try {
+              downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
+              res()
+            } catch (e) {
+              rej(e)
+            }
+          }
+        )
+      })
+    } catch (err) {
+      console.info('[Firebase Storage Notice]: Storage upload unavailable, persisting to Cloud Firestore:', err.message)
+    }
+  }
+
+  // 5. Final public image URL: Firebase Storage URL or optimized Data URL
+  const finalUrl = downloadUrl || optimized.dataUrl
+
+  // 6. Record metadata in Cloud Firestore 'website_images'
+  let docId = 'doc_' + timestamp
+  if (isFirebaseConfigured() && db) {
+    try {
+      const imageData = {
+        title: title || (file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Uploaded Image'),
         category,
-        uploadedAt: new Date().toISOString(),
-      },
-    })
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
-        onProgress(progress)
-      },
-      (error) => {
-        console.error('[Firebase Storage Upload Error]:', error)
-        reject(new Error(`Upload failed: ${error.message}`))
-      },
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
-
-          // Store record in Firestore 'website_images' collection
-          const imageData = {
-            title: title || file.name.replace(/\.[^/.]+$/, ''),
-            category,
-            description: description || '',
-            url: downloadUrl,
-            storagePath,
-            fileName: file.name,
-            fileSize: file.size,
-            contentType: file.type,
-            targetKey: targetKey || null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }
-
-          const docRef = await addDoc(collection(db, 'website_images'), imageData)
-
-          // If linked to a primary website section, update site_settings/images document
-          if (targetKey) {
-            await setActiveWebsiteImage(targetKey, downloadUrl, docRef.id)
-          }
-
-          resolve({
-            id: docRef.id,
-            ...imageData,
-            createdAt: new Date(),
-          })
-        } catch (err) {
-          console.error('[Firestore Record Error]:', err)
-          reject(err)
-        }
+        description: description || '',
+        url: finalUrl,
+        storagePath: downloadUrl ? storagePath : null,
+        fileName: file.name || 'image.jpg',
+        fileSize: optimized.size,
+        contentType: 'image/jpeg',
+        targetKey: targetKey || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       }
-    )
-  })
+
+      const docRef = await addDoc(collection(db, 'website_images'), imageData)
+      docId = docRef.id
+    } catch (dbErr) {
+      console.warn('[Firestore Record Notice]:', dbErr.message)
+    }
+  }
+
+  // 7. If linked to a primary website section, update site_settings/images document
+  if (targetKey) {
+    await setActiveWebsiteImage(targetKey, finalUrl, docId)
+  }
+
+  // 8. Local cache fallback update
+  try {
+    const current = getFallbackLocalGallery()
+    current.unshift({
+      id: docId,
+      title: title || (file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Uploaded Image'),
+      category,
+      description,
+      url: finalUrl,
+      storagePath,
+      fileName: file.name || 'image.jpg',
+      fileSize: optimized.size,
+      contentType: 'image/jpeg',
+      targetKey: targetKey || null,
+      createdAt: new Date(),
+    })
+    localStorage.setItem('kfs_local_gallery', JSON.stringify(current.slice(0, 30)))
+    window.dispatchEvent(new Event('kfs_local_gallery_updated'))
+  } catch {}
+
+  onProgress(100)
+
+  return {
+    id: docId,
+    title: title || file.name || 'Uploaded Image',
+    url: finalUrl,
+    storagePath,
+    createdAt: new Date(),
+  }
 }
 
 /**
@@ -287,6 +403,11 @@ export function applyImageToStore(sectionKey, imageUrl) {
       IMG.collections['Pants'] = imageUrl
       break
     default:
+      if (sectionKey.startsWith('c:')) {
+        IMG.collections[sectionKey.slice(2)] = imageUrl
+      } else {
+        IMG[sectionKey] = imageUrl
+      }
       break
   }
 }
@@ -306,7 +427,13 @@ export function subscribeToSiteImages(callback) {
             const data = snapshot.data()
             // Apply all active keys to the running store
             Object.keys(data).forEach((key) => {
-              if (typeof data[key] === 'string' && data[key].startsWith('http')) {
+              if (
+                typeof data[key] === 'string' &&
+                data[key].length > 0 &&
+                !key.endsWith('_updatedAt') &&
+                !key.endsWith('_docId') &&
+                key !== 'lastUpdated'
+              ) {
                 applyImageToStore(key, data[key])
               }
             })

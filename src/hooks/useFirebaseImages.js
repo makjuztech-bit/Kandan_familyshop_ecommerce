@@ -18,7 +18,13 @@ export function useFirebaseImages() {
       setActiveImages((prev) => {
         const next = { ...prev }
         Object.keys(remoteData).forEach((key) => {
-          if (typeof remoteData[key] === 'string' && remoteData[key].startsWith('http')) {
+          if (
+            typeof remoteData[key] === 'string' &&
+            remoteData[key].length > 0 &&
+            !key.endsWith('_updatedAt') &&
+            !key.endsWith('_docId') &&
+            key !== 'lastUpdated'
+          ) {
             next[key] = remoteData[key]
             applyImageToStore(key, remoteData[key])
           }

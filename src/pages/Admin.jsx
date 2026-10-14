@@ -12,6 +12,7 @@ import AdminOrderSearch from '../components/AdminOrderSearch'
 import AdminSales from './AdminSales'
 import AdminLoyalty from './AdminLoyalty'
 import {salesMetrics} from '../data/sales'
+import {uploadImageToFirebase} from '../services/imageService'
 const sel='min-h-11 w-full border border-gold-dark/50 bg-white px-3'
 function ImgIn({ label, value, onChange, folder = 'general' }) {
   const [errorMsg, setErrorMsg] = useState('')
@@ -47,56 +48,31 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
     setUploading(true)
 
     try {
-      // Read and optimize image client-side for smooth transmission
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const rawUrl = reader.result
-          const img = new Image()
-          img.onload = () => {
-            try {
-              const maxDimension = folder === 'background' ? 1920 : 1600
-              if (img.width <= maxDimension && img.height <= maxDimension) {
-                return resolve(rawUrl)
-              }
-              const scale = Math.min(1, maxDimension / Math.max(img.width, img.height))
-              const canvas = document.createElement('canvas')
-              canvas.width = Math.round(img.width * scale)
-              canvas.height = Math.round(img.height * scale)
-              const ctx = canvas.getContext('2d')
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-              resolve(canvas.toDataURL('image/jpeg', 0.88))
-            } catch {
-              resolve(rawUrl)
-            }
-          }
-          img.onerror = () => resolve(rawUrl)
-          img.src = rawUrl
-        }
-        reader.onerror = () => reject(new Error('Could not read the selected image file.'))
-        reader.readAsDataURL(file)
+      const category = folder === 'products' ? 'Catalogue Products' : folder === 'background' ? 'Hero Banners' : 'General'
+      const uploadRes = await uploadImageToFirebase({
+        file,
+        title: label,
+        category,
       })
 
-      // Send to /api/upload
-      const uploadEndpoint = `${API_BASE || ''}/api/upload`
-      const res = await fetch(uploadEndpoint, {
-        method: 'POST',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({
-          file: dataUrl,
-          filename: file.name,
-          folder,
-        }),
-      })
-
-      const data = await res.json().catch(() => null)
-      if (!res.ok || !data || !data.url) {
-        throw new Error((data && data.error) || `Upload failed with HTTP status ${res.status}`)
+      if (uploadRes && uploadRes.url) {
+        onChange(uploadRes.url)
+        setUploadSuccess(true)
+        setTimeout(() => setUploadSuccess(false), 3500)
+      } else {
+        throw new Error('Upload returned no URL.')
       }
 
-      onChange(data.url)
-      setUploadSuccess(true)
-      setTimeout(() => setUploadSuccess(false), 3500)
+      // Also notify local Express server if running in hybrid mode
+      if (typeof window !== 'undefined' && API_BASE !== undefined) {
+        try {
+          fetch(`${API_BASE || ''}/api/upload`, {
+            method: 'POST',
+            headers: getAdminAuthHeaders(),
+            body: JSON.stringify({ file: uploadRes.url, filename: file.name, folder }),
+          }).catch(() => {})
+        } catch {}
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Image upload failed. Please try again.')
     } finally {

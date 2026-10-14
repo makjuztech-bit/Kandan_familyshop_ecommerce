@@ -7,6 +7,7 @@ import {useCatalog} from '../data/products'
 import { useAuthStatus } from '../data/auth'
 import BackgroundModal from './BackgroundModal'
 import { LoyaltyHeaderBadge } from './LoyaltyWidget'
+import { useFirebaseImages } from '../hooks/useFirebaseImages'
 
 const nav=[
   ['/','Home'],
@@ -18,6 +19,7 @@ const nav=[
 ]
 
 export default function Layout(){
+  useFirebaseImages()
   const cv=useCatalog(),{count,wish}=useStore(),auth=useAuthStatus()
   const [open,setOpen]=useState(false),[q,setQ]=useState(''),[showBgModal,setShowBgModal]=useState(false)
   const nv=useNavigate(),{pathname,hash}=useLocation()

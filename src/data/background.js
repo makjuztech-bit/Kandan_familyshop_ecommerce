@@ -14,14 +14,13 @@ const subscribers = new Set()
 if (typeof window !== 'undefined') {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    // Clear stale external URLs (e.g. old Unsplash presets) — always use local showroom image
-    const isExternalUrl = saved && saved.startsWith('http') && !saved.startsWith(window.location.origin)
-    if (saved && typeof saved === 'string' && saved.trim() && saved !== '__idb_stored__' && !isExternalUrl) {
+    const isStalePreset = saved && saved.startsWith('https://images.unsplash.com')
+    if (saved && typeof saved === 'string' && saved.trim() && saved !== '__idb_stored__' && !isStalePreset) {
       currentBackground = saved
       IMG.hero = saved
     } else {
-      // Clear any stale external URL from storage
-      if (isExternalUrl) {
+      // Clear any stale unsplash preset from storage
+      if (isStalePreset) {
         try { localStorage.removeItem(STORAGE_KEY) } catch {}
       }
       currentBackground = DEFAULT_BACKGROUND
@@ -122,13 +121,13 @@ export async function syncBackgroundWithServer() {
 // On startup in browser: check IndexedDB and server database
 if (typeof window !== 'undefined') {
   idbGet(STORAGE_KEY).then((storedImage) => {
-    // Skip stale external URLs (e.g. old Unsplash presets)
-    const isExternal = storedImage && typeof storedImage === 'string' && storedImage.startsWith('http') && !storedImage.startsWith(window.location.origin)
-    if (storedImage && typeof storedImage === 'string' && !isExternal && storedImage !== currentBackground) {
+    // Skip stale external presets (e.g. old Unsplash presets)
+    const isStalePreset = storedImage && typeof storedImage === 'string' && storedImage.startsWith('https://images.unsplash.com')
+    if (storedImage && typeof storedImage === 'string' && !isStalePreset && storedImage !== currentBackground) {
       currentBackground = storedImage
       IMG.hero = storedImage
       emitChange()
-    } else if (isExternal) {
+    } else if (isStalePreset) {
       idbDelete(STORAGE_KEY)
     }
   })
@@ -214,12 +213,12 @@ export async function setBackgroundImage(newImage) {
         method: 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'background', value: cleanImage }),
-      }),
+      }).catch(() => {}),
       fetch(`${API_BASE}/api/settings`, {
         method: 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({ key: 'hero', value: cleanImage }),
-      }),
+      }).catch(() => {}),
     ])
   } catch (err) {
     console.warn('[setBackgroundImage] Server sync notice:', err.message)

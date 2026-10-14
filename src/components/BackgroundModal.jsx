@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useBackgroundImage, setBackgroundImage, resetBackgroundImage, DEFAULT_BACKGROUND } from '../data/background'
 import { btnP, btnO } from './ui'
-import { getAdminAuthHeaders } from '../config/shop'
+import { uploadImageToFirebase, setActiveWebsiteImage } from '../services/imageService'
 
 const PRESETS = [
   { name: 'Kanchipuram Silk Showroom (Default)', url: DEFAULT_BACKGROUND },
@@ -43,44 +43,18 @@ export default function BackgroundModal({ isOpen, onClose }) {
     setStatus('uploading')
 
     try {
-      // Scale and compress optimal HD dimensions for fast loading
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const img = new Image()
-          img.onload = () => {
-            const scale = Math.min(1, 1920 / img.width)
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.round(img.width * scale)
-            canvas.height = Math.round(img.height * scale)
-            const ctx = canvas.getContext('2d')
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-            resolve(canvas.toDataURL('image/jpeg', 0.88))
-          }
-          img.onerror = () => reject(new Error('Could not parse image.'))
-          img.src = reader.result
-        }
-        reader.onerror = () => reject(new Error('Could not read file.'))
-        reader.readAsDataURL(file)
+      const uploaded = await uploadImageToFirebase({
+        file,
+        title: 'Website Background',
+        category: 'Hero Banners',
+        targetKey: 'hero',
       })
 
-      // Upload to server and Supabase storage
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({
-          file: dataUrl,
-          filename: file.name,
-          folder: 'background',
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || 'Upload failed.')
+      if (!uploaded?.url) {
+        throw new Error('Upload succeeded but no URL was returned.')
       }
 
-      setPreview(data.url)
+      setPreview(uploaded.url)
       setStatus('upload_success')
     } catch (err) {
       setStatus(err.message || 'Could not upload background image. Please retry.')
@@ -98,6 +72,11 @@ export default function BackgroundModal({ isOpen, onClose }) {
 
     setLoading(true)
     const success = await setBackgroundImage(target)
+    try {
+      await setActiveWebsiteImage('hero', target)
+    } catch (err) {
+      console.warn('[BackgroundModal] setActiveWebsiteImage warning:', err.message)
+    }
     setLoading(false)
 
     if (success) {
