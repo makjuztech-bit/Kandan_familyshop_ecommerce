@@ -7,13 +7,13 @@ import { getAnalytics, isSupported } from 'firebase/analytics'
 // 1. Read config from Vite environment variables or admin-saved configuration
 function getFirebaseConfig() {
   const envConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCludvlHAzaHxS0YuYOCEsqwpGA6H3rExs',
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'kandan-ecommerce.firebaseapp.com',
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'kandan-ecommerce',
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'kandan-ecommerce.firebasestorage.app',
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '9743440248',
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:9743440248:web:3864bb93a0de9b633e508d',
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-09NKCBD1MR',
   }
 
   // Also support admin-saved configuration from browser for instant onboarding
