@@ -47,7 +47,7 @@ const seed = rawProducts.map((p) => {
 
 const seedById = Object.fromEntries(seed.map((p) => [p.id, p]))
 
-const KEY = 'kfs_catalog_v3'
+const KEY = 'kfs_catalog_v4'
 const IK = 'kfs_site_images'
 const subs = new Set()
 const D = structuredClone(IMG)
@@ -57,6 +57,7 @@ if (typeof localStorage !== 'undefined') {
   try {
     localStorage.removeItem('kfs_catalog')
     localStorage.removeItem('kfs_catalog_v2')
+    localStorage.removeItem('kfs_catalog_v3')
   } catch {}
 }
 
@@ -109,8 +110,8 @@ function load(serverProducts = null, serverSettings = null) {
   let list = serverProducts
   if (!list) {
     const cached = rd(KEY, null)
-    // Only accept cached list if it matches the current 27-product catalog
-    if (Array.isArray(cached) && cached.length === seed.length && cached.every((p) => seedById[p.id])) {
+    // Accept cached list containing added/modified products
+    if (Array.isArray(cached) && cached.length > 0) {
       list = cached
     } else {
       list = seed
@@ -199,57 +200,93 @@ const saveLocal = (k, v) => {
   }
 }
 
+function getAdminAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token =
+      sessionStorage.getItem('kfs_admin_token') ||
+      sessionStorage.getItem('kfs_firebase_admin_token') ||
+      localStorage.getItem('kfs_admin_token')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+  return headers
+}
+
 export async function saveProduct(p) {
   const sanitized = sanitizeProduct(p)
-  if (!sanitized) return false
+  if (!sanitized) throw new Error('Invalid product data.')
 
-  // Optimistic update
-  const i = products.findIndex((x) => x.id === sanitized.id)
-  const next = i < 0 ? [sanitized, ...products] : products.map((x) => (x.id === sanitized.id ? sanitized : x))
+  // If any image is base64 / dataUrl, upload to server /api/upload first
+  const processedImages = []
+  for (const img of sanitized.images) {
+    if (typeof img === 'string' && img.startsWith('data:image/')) {
+      try {
+        const upRes = await fetch(`${API_BASE}/api/upload`, {
+          method: 'POST',
+          headers: getAdminAuthHeaders(),
+          body: JSON.stringify({ file: img, filename: `${sanitized.id}.jpg`, folder: 'products' }),
+        })
+        if (upRes.ok) {
+          const upData = await upRes.json()
+          processedImages.push(upData.url || img)
+          continue
+        }
+      } catch (err) {
+        console.warn('Image upload failed, using original:', err.message)
+      }
+    }
+    processedImages.push(img)
+  }
+  sanitized.images = processedImages
+
+  // Save to backend database first
+  const headers = getAdminAuthHeaders()
+  const res = await fetch(`${API_BASE}/api/products`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(sanitized),
+  })
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    throw new Error(errData.error || `Server failed to save product (HTTP ${res.status}).`)
+  }
+
+  const data = await res.json()
+  const saved = sanitizeProduct(data.product || sanitized)
+
+  // Update in-memory catalogue and local cache
+  const i = products.findIndex((x) => x.id === saved.id)
+  const next = i < 0 ? [saved, ...products] : products.map((x) => (x.id === saved.id ? saved : x))
   products.splice(0, products.length, ...next)
-  byId[sanitized.id] = sanitized
+  byId[saved.id] = saved
   saveLocal(KEY, next)
   emit()
 
-  // Save to database
-  try {
-    const res = await fetch(`${API_BASE}/api/products/${sanitized.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sanitized),
-    })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.product) {
-        const confirmed = sanitizeProduct(data.product)
-        byId[confirmed.id] = confirmed
-        const idx = products.findIndex((x) => x.id === confirmed.id)
-        if (idx >= 0) products[idx] = confirmed
-        saveLocal(KEY, products)
-        emit()
-      }
-      return true
-    }
-  } catch (err) {
-    console.warn('[saveProduct] Server sync error:', err.message)
-  }
-
-  return true
+  return saved
 }
 
 export async function deleteProduct(id) {
   if (!id) return
+  const headers = getAdminAuthHeaders()
+  const res = await fetch(`${API_BASE}/api/products/${id}`, {
+    method: 'DELETE',
+    headers,
+  })
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    throw new Error(errData.error || `Server failed to delete product (HTTP ${res.status}).`)
+  }
+
   const next = products.filter((p) => p.id !== id)
   products.splice(0, products.length, ...next)
   delete byId[id]
   saveLocal(KEY, next)
   emit()
-
-  try {
-    await fetch(`${API_BASE}/api/products/${id}`, { method: 'DELETE' })
-  } catch (err) {
-    console.warn('[deleteProduct] Server sync error:', err.message)
-  }
+  return true
 }
 
 export const siteImg = (k) => (k.startsWith('c:') ? IMG.collections[k.slice(2)] : IMG[k])
@@ -272,7 +309,7 @@ export async function setSiteImage(k, v) {
   try {
     await fetch(`${API_BASE}/api/settings`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminAuthHeaders(),
       body: JSON.stringify({ key: k, value: v }),
     })
   } catch (err) {

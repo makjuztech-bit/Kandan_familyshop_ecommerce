@@ -12,6 +12,7 @@ import { uploadImage, parseDataUrl, deleteImage } from './uploads.js'
 import { getAllProducts, getProductById, saveProductToDatabase, deleteProductFromDatabase, resetProductsToSeed } from './products.js'
 import { getAllSettings, getSetting, saveSetting, resetSettings } from './settings.js'
 import { isServerSupabaseConfigured } from './supabase.js'
+import { registerAuthRoutes, requireAdminAuth } from './auth.js'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -77,17 +78,11 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
-// Admin Authentication
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body || {}
-  if (password === ADMIN_PASSWORD) {
-    return res.json({ ok: true, token: ADMIN_TOKEN })
-  }
-  return res.status(401).json({ error: 'Incorrect password.' })
-})
+// Register Authentication and OTP routes
+registerAuthRoutes(app)
 
-// Image Upload Endpoint (JPG, JPEG, PNG, WebP up to 10MB)
-app.post('/api/upload', async (req, res) => {
+// Image Upload Endpoint (JPG, JPEG, PNG, WebP up to 10MB) - Protected
+app.post('/api/upload', requireAdminAuth, async (req, res) => {
   try {
     const { file, filename, folder = 'general' } = req.body || {}
     if (!file) return res.status(400).json({ error: 'No image file provided.' })
@@ -110,8 +105,8 @@ app.post('/api/upload', async (req, res) => {
   }
 })
 
-// Delete Image Endpoint
-app.post('/api/upload/delete', async (req, res) => {
+// Delete Image Endpoint - Protected
+app.post('/api/upload/delete', requireAdminAuth, async (req, res) => {
   try {
     const { url } = req.body || {}
     const result = await deleteImage(url)
@@ -140,7 +135,7 @@ app.get('/api/products/:id', (req, res) => {
   }
 })
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', requireAdminAuth, (req, res) => {
   try {
     const product = saveProductToDatabase(req.body)
     res.json({ ok: true, product })
@@ -149,7 +144,7 @@ app.post('/api/products', (req, res) => {
   }
 })
 
-app.put('/api/products/:id', (req, res) => {
+app.put('/api/products/:id', requireAdminAuth, (req, res) => {
   try {
     const product = saveProductToDatabase({ ...req.body, id: req.params.id })
     res.json({ ok: true, product })
@@ -158,7 +153,7 @@ app.put('/api/products/:id', (req, res) => {
   }
 })
 
-app.delete('/api/products/:id', (req, res) => {
+app.delete('/api/products/:id', requireAdminAuth, (req, res) => {
   try {
     deleteProductFromDatabase(req.params.id)
     res.json({ ok: true, message: 'Product deleted.' })
@@ -167,7 +162,7 @@ app.delete('/api/products/:id', (req, res) => {
   }
 })
 
-app.post('/api/products/reset', (_req, res) => {
+app.post('/api/products/reset', requireAdminAuth, (_req, res) => {
   try {
     const products = resetProductsToSeed()
     res.json({ ok: true, products })
@@ -194,7 +189,7 @@ app.get('/api/settings/:key', (req, res) => {
   }
 })
 
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', requireAdminAuth, (req, res) => {
   try {
     const { key, value } = req.body || {}
     if (!key) return res.status(400).json({ error: 'Setting key is required.' })
@@ -205,7 +200,7 @@ app.post('/api/settings', (req, res) => {
   }
 })
 
-app.post('/api/settings/reset', (_req, res) => {
+app.post('/api/settings/reset', requireAdminAuth, (_req, res) => {
   try {
     const settings = resetSettings()
     res.json({ ok: true, settings })
@@ -218,7 +213,8 @@ registerReviewRoutes(app)
 registerLoyaltyRoutes(app)
 registerRazorpayRoutes(app)
 
-app.get('/api/orders', (req, res) => {
+// Admin Order Management - Protected
+app.get('/api/orders', requireAdminAuth, (req, res) => {
   try {
     res.json(getAllOrders())
   } catch (err) {
@@ -250,7 +246,7 @@ app.post('/api/orders', async (req, res) => {
   }
 })
 
-app.put('/api/orders/:no', (req, res) => {
+app.put('/api/orders/:no', requireAdminAuth, (req, res) => {
   try {
     const order = updateOrderInDatabase(req.params.no, req.body)
     res.json({ ok: true, order })
@@ -259,7 +255,7 @@ app.put('/api/orders/:no', (req, res) => {
   }
 })
 
-app.delete('/api/orders/:no', (req, res) => {
+app.delete('/api/orders/:no', requireAdminAuth, (req, res) => {
   try {
     deleteOrderFromDatabase(req.params.no)
     res.json({ ok: true, message: 'Order deleted successfully.' })

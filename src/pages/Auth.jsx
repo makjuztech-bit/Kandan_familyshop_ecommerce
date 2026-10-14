@@ -22,97 +22,281 @@ import {ReviewSummary,ProductSalesSummary} from '../components/Rating'
 export function Login() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('otp')
-  const [phone, setPhone] = useState('')
+  const [channel, setChannel] = useState('email')
+  const [destination, setDestination] = useState('')
   const [otp, setOtp] = useState('')
-  const [challenge, setChallenge] = useState(null)
+  const [otpSent, setOtpSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const [values, setValues] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
 
   if (isLoggedIn()) {
     return <Navigate to="/account" replace />
   }
 
-  const onChange = e => setValues({ ...values, [e.target.name]: e.target.value })
-  const generateOtp = e => {
-    e.preventDefault()
-    const nextErrors = validate({ phone }, ['phone'])
-    setErrors(nextErrors)
-    setMessage('')
-    if (Object.keys(nextErrors).length) return
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setInterval(() => {
+      setCooldown((c) => Math.max(0, c - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [cooldown])
 
-    if (!globalThis.crypto?.getRandomValues) {
-      setMessage('Secure OTP generation is unavailable in this browser. Use email and password instead.')
-      return
-    }
+  const onChange = (e) => setValues({ ...values, [e.target.name]: e.target.value })
 
-    const random = new Uint32Array(1)
-    globalThis.crypto.getRandomValues(random)
-    const code = String(random[0] % 1000000).padStart(6, '0')
-    setChallenge({ code, phone: phone.replace(/\D/g, ''), expiresAt: Date.now() + 5 * 60 * 1000 })
-    setOtp('')
+  const handleSendOtp = async (e) => {
+    if (e) e.preventDefault()
     setMessage('')
-  }
-  const verifyOtp = e => {
-    e.preventDefault()
-    const nextErrors = validate({ phone }, ['phone'])
-    if (!/^\d{6}$/.test(otp)) nextErrors.otp = 'Enter the 6-digit OTP.'
-    setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
-    if (!challenge || challenge.phone !== phone.replace(/\D/g, '')) {
-      setMessage('Generate a new OTP for this mobile number.')
-      return
-    }
-    if (Date.now() > challenge.expiresAt) {
-      setChallenge(null)
-      setOtp('')
-      setMessage('That OTP has expired. Please generate a new one.')
-      return
-    }
-    if (otp !== challenge.code) {
-      setErrors({ otp: 'That OTP is incorrect. Check the code and try again.' })
+    setSuccessMsg('')
+    const target = destination.trim()
+
+    if (!target) {
+      setErrors({ destination: channel === 'email' ? 'Enter your email address.' : 'Enter your mobile number.' })
       return
     }
 
-    const result = loginDemoUserByPhone(phone)
-    if (!result.ok) {
-      setMessage(result.message)
+    if (channel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target)) {
+      setErrors({ destination: 'Enter a valid email address.' })
       return
     }
-    setMessage('')
-    navigate('/account')
-  }
-  const changePhone = e => {
-    setPhone(e.target.value)
-    setChallenge(null)
-    setOtp('')
+
+    if (channel === 'phone' && target.replace(/\D/g, '').length < 10) {
+      setErrors({ destination: 'Enter a valid 10-digit mobile number.' })
+      return
+    }
+
     setErrors({})
+    setSending(true)
+
+    try {
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: target, channel }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data.cooldownRemaining) {
+          setCooldown(data.cooldownRemaining)
+        }
+        throw new Error(data.error || 'Failed to send verification code.')
+      }
+
+      setOtpSent(true)
+      setOtp('')
+      setCooldown(60)
+      setSuccessMsg(data.message || `Verification code sent to ${target}. Valid for 5 minutes.`)
+    } catch (err) {
+      setMessage(err.message || 'Error sending verification code.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault()
     setMessage('')
+    setSuccessMsg('')
+    const cleanOtp = otp.trim().replace(/\D/g, '')
+
+    if (cleanOtp.length !== 6) {
+      setErrors({ otp: 'Please enter the complete 6-digit OTP code.' })
+      return
+    }
+
+    setErrors({})
+    setVerifying(true)
+
+    try {
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: destination.trim(), code: cleanOtp }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Verification failed.')
+      }
+
+      if (channel === 'phone') {
+        loginDemoUserByPhone(destination.trim())
+      } else {
+        const currentUser = getDemoUser()
+        saveDemoUser({ ...currentUser, email: destination.trim(), role: 'customer' })
+        localStorage.setItem(
+          'kfs_demo_session',
+          JSON.stringify({
+            loggedIn: true,
+            name: currentUser.name || 'Valued Customer',
+            email: destination.trim(),
+            token: data.token,
+            role: 'customer',
+          })
+        )
+        window.dispatchEvent(new Event('kfs_auth_change'))
+      }
+
+      navigate('/account')
+    } catch (err) {
+      setErrors({ otp: err.message || 'Incorrect OTP code.' })
+    } finally {
+      setVerifying(false)
+    }
   }
 
   if (mode === 'otp') {
     return (
       <Wrap className="py-12">
         <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl">Login with mobile</h1>
-          <p className="mt-2 text-sm text-ink/70">Enter your registered mobile number to receive an OTP.</p>
-          <form onSubmit={generateOtp} noValidate className="mt-6 space-y-4">
-            <Field label="Mobile number" id="phone" type="tel" inputMode="numeric" autoComplete="tel" value={phone} onChange={changePhone} error={errors.phone} />
-            <button className={btnP + ' w-full'}>Generate OTP</button>
-          </form>
-          {challenge && <div className="mt-4 rounded-md bg-gold/15 p-3 text-sm" role="status">
-            <p>Your OTP for {phone}: <strong className="font-mono text-lg tracking-widest">{challenge.code}</strong></p>
-            <p className="mt-1 text-ink/70">Valid for 5 minutes. Enter the code below to login.</p>
-          </div>}
-          {challenge && <form onSubmit={verifyOtp} noValidate className="mt-4 space-y-4">
-            <Field label="6-digit OTP" id="otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} error={errors.otp} />
-            <button className={btnP + ' w-full'}>Verify OTP and login</button>
-          </form>}
-          {message && <p role="alert" className="mt-4 rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
-          <p className="mt-5 text-center text-sm text-ink/70">
-            <button type="button" className="font-bold text-primary" onClick={() => { setMode('email'); setMessage(''); setErrors({}) }}>Use email and password instead</button>
+          <h1 className="text-3xl font-serif font-bold text-primary">Login with OTP</h1>
+          <p className="mt-2 text-sm text-ink/70">
+            Secure, passwordless verification delivered directly to your verified inbox or phone.
           </p>
-          <p className="mt-3 text-center text-sm text-ink/70">New here? <Link to="/register" className="font-bold text-primary">Create account</Link></p>
+
+          <div className="mt-6 flex rounded-xl border border-gold/40 bg-ivory/60 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setChannel('email')
+                setOtpSent(false)
+                setMessage('')
+                setSuccessMsg('')
+                setErrors({})
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                channel === 'email' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'
+              }`}
+            >
+              ✉️ Email OTP
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChannel('phone')
+                setOtpSent(false)
+                setMessage('')
+                setSuccessMsg('')
+                setErrors({})
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                channel === 'phone' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'
+              }`}
+            >
+              📱 Mobile SMS OTP
+            </button>
+          </div>
+
+          <form onSubmit={handleSendOtp} noValidate className="mt-5 space-y-4">
+            <Field
+              label={channel === 'email' ? 'Email address' : 'Mobile number'}
+              id="destination"
+              type={channel === 'email' ? 'email' : 'tel'}
+              inputMode={channel === 'email' ? 'email' : 'numeric'}
+              placeholder={channel === 'email' ? 'you@example.com' : 'e.g. 9876543210'}
+              value={destination}
+              onChange={(e) => {
+                setDestination(e.target.value)
+                setOtpSent(false)
+                setSuccessMsg('')
+                setMessage('')
+                setErrors({})
+              }}
+              error={errors.destination}
+            />
+
+            {!otpSent && (
+              <button
+                type="submit"
+                disabled={sending}
+                className={btnP + ' w-full flex items-center justify-center gap-2'}
+              >
+                {sending ? 'Sending Verification Code…' : `Send ${channel === 'email' ? 'Email' : 'SMS'} OTP`}
+              </button>
+            )}
+          </form>
+
+          {successMsg && (
+            <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs text-emerald-900" role="status">
+              <span className="font-bold">✓ Sent: </span>
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          {message && (
+            <div className="mt-4 rounded-xl bg-red-50 border border-red-300 p-3 text-xs text-red-800" role="alert">
+              <span>{message}</span>
+            </div>
+          )}
+
+          {otpSent && (
+            <form onSubmit={handleVerifyOtp} noValidate className="mt-5 space-y-4 pt-4 border-t border-gold/30">
+              <Field
+                label="Enter 6-Digit Verification Code"
+                id="otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="••••••"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                error={errors.otp}
+              />
+
+              <div className="flex items-center justify-between text-xs text-ink/70">
+                <span>Valid for 5 minutes</span>
+                {cooldown > 0 ? (
+                  <span className="font-semibold text-primary/70">Resend in {cooldown}s</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sending}
+                    className="font-bold text-primary underline"
+                  >
+                    Resend Code
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={verifying || otp.length !== 6}
+                className={btnP + ' w-full disabled:opacity-50'}
+              >
+                {verifying ? 'Verifying OTP…' : 'Verify & Sign In'}
+              </button>
+            </form>
+          )}
+
+          <p className="mt-6 text-center text-sm text-ink/70">
+            <button
+              type="button"
+              className="font-bold text-primary underline"
+              onClick={() => {
+                setMode('password')
+                setMessage('')
+                setSuccessMsg('')
+                setErrors({})
+              }}
+            >
+              Sign in with password instead
+            </button>
+          </p>
+          <p className="mt-2 text-center text-sm text-ink/70">
+            New customer?{' '}
+            <Link to="/register" className="font-bold text-primary">
+              Create account
+            </Link>
+          </p>
         </div>
       </Wrap>
     )

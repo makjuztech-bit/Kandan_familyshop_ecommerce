@@ -40,8 +40,8 @@ const isCancelledOrFailed = (order) => {
 
 const StatCard = ({ label, value }) => (
   <article className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
-    <p className="text-sm text-ink/60">{label}</p>
-    <p className="mt-2 font-serif text-3xl font-semibold text-primary">{value}</p>
+    <p className="text-sm text-ink/70 font-medium">{label}</p>
+    <p className="mt-2 font-sans text-3xl font-extrabold text-primary tabular-nums lining-nums">{value}</p>
   </article>
 );
 

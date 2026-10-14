@@ -10,6 +10,20 @@ const emit = () => subs.forEach(f => f())
 // Moved below useOrders
 let initialLoadDone = false;
 
+function getAdminAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token =
+      sessionStorage.getItem('kfs_admin_token') ||
+      sessionStorage.getItem('kfs_firebase_admin_token') ||
+      localStorage.getItem('kfs_admin_token')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+  return headers
+}
+
 export async function addOrder(orderData) {
   try {
     const res = await fetch(`${API_BASE}/api/orders`, {
@@ -33,7 +47,7 @@ export async function updateOrder(no, patch) {
   try {
     const res = await fetch(`${API_BASE}/api/orders/${no}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminAuthHeaders(),
       body: JSON.stringify(patch)
     });
     if (res.ok) {
@@ -50,7 +64,10 @@ export async function updateOrder(no, patch) {
 
 export async function deleteOrder(no) {
   try {
-    await fetch(`${API_BASE}/api/orders/${no}`, { method: 'DELETE' });
+    await fetch(`${API_BASE}/api/orders/${no}`, {
+      method: 'DELETE',
+      headers: getAdminAuthHeaders()
+    });
   } catch (err) {
     console.error('Failed to delete order on server:', err);
   }
@@ -73,7 +90,9 @@ export const useOrders = () => {
 export async function loadOrders(force = false) {
   if (loaded && !force) return list;
   try {
-    const res = await fetch(`${API_BASE}/api/orders`);
+    const res = await fetch(`${API_BASE}/api/orders`, {
+      headers: getAdminAuthHeaders()
+    });
     if (res.ok) {
       list = await res.json();
       loaded = true;

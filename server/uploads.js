@@ -16,6 +16,9 @@ const ALLOWED_MIME_TYPES = {
   'image/jpg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'image/jfif': 'jpg',
+  'image/pjpeg': 'jpg',
+  'image/x-png': 'png',
 }
 
 /**
@@ -30,42 +33,48 @@ export function validateImageBuffer(buffer, mimeType) {
   }
 
   const normalizedMime = mimeType?.toLowerCase()
-  if (!ALLOWED_MIME_TYPES[normalizedMime]) {
-    return { error: 'Only JPG, JPEG, PNG, and WebP images are supported.' }
-  }
 
   // Validate magic bytes
   const isJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
   const isPng = buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
   const isWebp = buffer.length > 12 && buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP'
 
-  if (normalizedMime === 'image/jpeg' || normalizedMime === 'image/jpg') {
-    if (!isJpeg) return { error: 'File content does not match JPEG format.' }
-  } else if (normalizedMime === 'image/png') {
-    if (!isPng) return { error: 'File content does not match PNG format.' }
-  } else if (normalizedMime === 'image/webp') {
-    if (!isWebp) return { error: 'File content does not match WebP format.' }
+  let ext = ALLOWED_MIME_TYPES[normalizedMime]
+  if (!ext) {
+    if (isJpeg) ext = 'jpg'
+    else if (isPng) ext = 'png'
+    else if (isWebp) ext = 'webp'
+    else return { error: 'Only JPG, JPEG, PNG, and WebP images are supported.' }
   }
 
-  return { ok: true, ext: ALLOWED_MIME_TYPES[normalizedMime] }
+  if (ext === 'jpg' && !isJpeg) return { error: 'File content does not match JPEG format.' }
+  if (ext === 'png' && !isPng) return { error: 'File content does not match PNG format.' }
+  if (ext === 'webp' && !isWebp) return { error: 'File content does not match WebP format.' }
+
+  return { ok: true, ext }
 }
 
 /**
- * Parses base64 data URL into buffer and mimeType
+ * Parses base64 data URL into buffer and mimeType safely
  */
 export function parseDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
     return { error: 'Invalid image data URL format.' }
   }
 
-  const matches = dataUrl.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/)
-  if (!matches || matches.length !== 3) {
+  const commaIndex = dataUrl.indexOf(',')
+  if (commaIndex === -1) {
     return { error: 'Malformed base64 image data URL.' }
   }
 
-  const mimeType = matches[1].toLowerCase()
+  const header = dataUrl.slice(0, commaIndex)
+  const base64Data = dataUrl.slice(commaIndex + 1).replace(/\s/g, '')
+
+  const mimeMatch = header.match(/^data:([^;]+);base64$/i)
+  const mimeType = (mimeMatch ? mimeMatch[1] : 'image/jpeg').toLowerCase()
+
   try {
-    const buffer = Buffer.from(matches[2], 'base64')
+    const buffer = Buffer.from(base64Data, 'base64')
     return { buffer, mimeType }
   } catch {
     return { error: 'Could not decode base64 image data.' }

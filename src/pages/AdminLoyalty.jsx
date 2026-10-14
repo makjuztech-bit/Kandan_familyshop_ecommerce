@@ -262,24 +262,24 @@ export default function AdminLoyalty() {
       {/* 1. Summary Stats Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="border border-gold/40 bg-white p-4 shadow-sm">
-          <p className="text-xs font-bold text-ink/60 uppercase">Total Points Issued</p>
-          <p className="mt-1 font-serif text-3xl font-semibold text-emerald-800">
+          <p className="text-xs font-bold text-ink/70 uppercase">Total Points Issued</p>
+          <p className="mt-1 font-sans text-3xl font-extrabold text-emerald-800 tabular-nums lining-nums">
             +{stats.totalIssuedPoints.toLocaleString('en-IN')}
           </p>
           <p className="mt-1 text-xs text-ink/50">Lifetime points awarded to customers</p>
         </div>
 
         <div className="border border-gold/40 bg-white p-4 shadow-sm">
-          <p className="text-xs font-bold text-ink/60 uppercase">Total Points Redeemed</p>
-          <p className="mt-1 font-serif text-3xl font-semibold text-amber-900">
+          <p className="text-xs font-bold text-ink/70 uppercase">Total Points Redeemed</p>
+          <p className="mt-1 font-sans text-3xl font-extrabold text-amber-900 tabular-nums lining-nums">
             {stats.totalRedeemedPoints.toLocaleString('en-IN')}
           </p>
           <p className="mt-1 text-xs text-ink/50">Savings redeemed on orders</p>
         </div>
 
         <div className="border border-gold/40 bg-white p-4 shadow-sm">
-          <p className="text-xs font-bold text-ink/60 uppercase">Outstanding Balance</p>
-          <p className="mt-1 font-serif text-3xl font-semibold text-primary">
+          <p className="text-xs font-bold text-ink/70 uppercase">Outstanding Balance</p>
+          <p className="mt-1 font-sans text-3xl font-extrabold text-primary tabular-nums lining-nums">
             {stats.totalOutstandingPoints.toLocaleString('en-IN')}
           </p>
           <p className="mt-1 text-xs text-ink/50">
@@ -288,8 +288,8 @@ export default function AdminLoyalty() {
         </div>
 
         <div className="border border-gold/40 bg-white p-4 shadow-sm">
-          <p className="text-xs font-bold text-ink/60 uppercase">Active Loyalty Members</p>
-          <p className="mt-1 font-serif text-3xl font-semibold text-ink">
+          <p className="text-xs font-bold text-ink/70 uppercase">Active Loyalty Members</p>
+          <p className="mt-1 font-sans text-3xl font-extrabold text-ink tabular-nums lining-nums">
             {stats.totalMembers.toLocaleString('en-IN')}
           </p>
           <p className="mt-1 text-xs text-ink/50">Enrolled customer accounts</p>

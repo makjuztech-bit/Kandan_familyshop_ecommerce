@@ -23,7 +23,8 @@
       "/images/products/kfs-001-1.jpg",
       "/images/products/kfs-001-2.jpg",
       "/images/products/kfs-001-3.jpg",
-      "/images/products/kfs-001-4.jpg"
+      "/images/products/kfs-001-4.jpg",
+      "/images/products/kfs-001-5.jpg"
     ]
   },
   {
@@ -31,9 +32,9 @@
     "sku": "KFS-002",
     "name": "DABI",
     "collection": "Textiles",
-    "colour": "Textile",
-    "fabric": "",
-    "zari": "",
+    "colour": "Bottle Green & Purple",
+    "fabric": "Art Silk Dabi Weave",
+    "zari": "Antique Gold Zari Border",
     "price": 1500,
     "originalPrice": 1500,
     "stock": true,
@@ -45,12 +46,13 @@
     "best": true,
     "isNew": false,
     "discount": 0,
-    "hex": "#6b1523",
+    "hex": "#1b4d3e",
     "images": [
       "/images/products/kfs-002-1.jpg",
       "/images/products/kfs-002-2.jpg",
       "/images/products/kfs-002-3.jpg",
-      "/images/products/kfs-002-4.jpg"
+      "/images/products/kfs-002-4.jpg",
+      "/images/products/kfs-002-5.jpg"
     ]
   },
   {

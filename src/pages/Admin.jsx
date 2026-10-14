@@ -2,7 +2,7 @@ import {useState} from 'react'
 import {Link} from 'react-router-dom'
 import {products,COLLECTIONS,HEX,inr,saveProduct,deleteProduct,resetCatalog,useCatalog,setSiteImage,siteImg} from '../data/products'
 import {useOrders,updateOrder,deleteOrder,loadOrders} from '../data/orders'
-import {ADMIN_PASSWORD,SHOP} from '../config/shop'
+import {ADMIN_PASSWORD,SHOP,API_BASE} from '../config/shop'
 import {isSupabaseConfigured} from '../lib/supabase'
 import {setBackgroundImage, resetBackgroundImage, DEFAULT_BACKGROUND} from '../data/background'
 import {Img,Field,WhatsApp,btnP,btnO} from '../components/ui'
@@ -17,7 +17,8 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
   const [errorMsg, setErrorMsg] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
-  const id = 'i' + label.replace(/\W/g, '')
+  const fileInputId = 'i_file_' + label.replace(/\W/g, '')
+  const textInputId = 'i_txt_' + label.replace(/\W/g, '')
 
   const pick = async (e) => {
     const file = e.target.files?.[0]
@@ -25,17 +26,20 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
     setUploadSuccess(false)
     if (!file) return
 
-    // 1. Validate file format
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
-    if (!validTypes.includes(file.type.toLowerCase())) {
-      setErrorMsg('Choose a JPG, JPEG, PNG, or WebP image.')
+    // 1. Validate file format (support all image formats & extensions)
+    const validExtensions = /\.(jpe?g|png|webp|jfif|avif|heic)$/i
+    const isImageMime = file.type ? file.type.startsWith('image/') : false
+    const isImageExt = validExtensions.test(file.name)
+
+    if (!isImageMime && !isImageExt) {
+      setErrorMsg('Please select an image file (JPG, PNG, WebP).')
       e.target.value = ''
       return
     }
 
-    // 2. Validate file size (10 MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg('Image file must be 10 MB or smaller.')
+    // 2. Validate file size (15 MB max before client-side scaling)
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMsg('Image file must be 15 MB or smaller.')
       e.target.value = ''
       return
     }
@@ -43,31 +47,40 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
     setUploading(true)
 
     try {
-      // Scale large image on client for fast upload and crisp resolution
+      // Read and optimize image client-side for smooth transmission
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => {
+          const rawUrl = reader.result
           const img = new Image()
           img.onload = () => {
-            const maxDimension = folder === 'background' ? 1920 : 1600
-            const scale = Math.min(1, maxDimension / Math.max(img.width, img.height))
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.round(img.width * scale)
-            canvas.height = Math.round(img.height * scale)
-            const ctx = canvas.getContext('2d')
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-            resolve(canvas.toDataURL('image/jpeg', 0.86))
+            try {
+              const maxDimension = folder === 'background' ? 1920 : 1600
+              if (img.width <= maxDimension && img.height <= maxDimension) {
+                return resolve(rawUrl)
+              }
+              const scale = Math.min(1, maxDimension / Math.max(img.width, img.height))
+              const canvas = document.createElement('canvas')
+              canvas.width = Math.round(img.width * scale)
+              canvas.height = Math.round(img.height * scale)
+              const ctx = canvas.getContext('2d')
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+              resolve(canvas.toDataURL('image/jpeg', 0.88))
+            } catch {
+              resolve(rawUrl)
+            }
           }
-          img.onerror = () => reject(new Error('Could not parse image.'))
-          img.src = reader.result
+          img.onerror = () => resolve(rawUrl)
+          img.src = rawUrl
         }
-        reader.onerror = () => reject(new Error('Could not read image file.'))
+        reader.onerror = () => reject(new Error('Could not read the selected image file.'))
         reader.readAsDataURL(file)
       })
 
       // Send to /api/upload
       const adminToken = sessionStorage.getItem('kfs_admin_token') || ''
-      const res = await fetch('/api/upload', {
+      const uploadEndpoint = `${API_BASE || ''}/api/upload`
+      const res = await fetch(uploadEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,9 +93,9 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || 'Failed to upload to permanent storage.')
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data || !data.url) {
+        throw new Error((data && data.error) || `Upload failed with HTTP status ${res.status}`)
       }
 
       onChange(data.url)
@@ -101,8 +114,9 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
       <div className="h-28 w-24 shrink-0 overflow-hidden rounded-lg border border-gold/40 bg-ivory-dark relative shadow-sm">
         <Img src={value} alt={label + ' preview'} className="h-full w-full object-cover" />
         {uploading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-xs font-bold">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white text-[11px] font-bold p-1 text-center">
             <span className="animate-spin text-lg">⏳</span>
+            <span>Uploading...</span>
           </div>
         )}
       </div>
@@ -110,7 +124,7 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
       <div className="flex-1 space-y-1.5">
         <Field
           label={label + ' — Image URL'}
-          id={id}
+          id={textInputId}
           value={value || ''}
           placeholder="https://... or uploaded image path"
           onChange={(e) => {
@@ -120,16 +134,22 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
         />
 
         <div className="flex flex-wrap items-center gap-3 pt-0.5">
-          <label className="inline-flex items-center gap-2 rounded-lg border border-gold/50 bg-ivory px-3 py-1.5 text-xs font-bold text-primary hover:bg-gold/20 cursor-pointer transition-colors">
-            <span>📷</span> {uploading ? 'Uploading to Storage…' : value ? 'Replace Photo' : 'Upload from Device'}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/jpg"
-              onChange={pick}
-              disabled={uploading}
-              className="hidden"
-            />
+          <label
+            htmlFor={fileInputId}
+            className={`inline-flex items-center gap-2 rounded-lg border border-gold/50 bg-ivory px-3 py-1.5 text-xs font-bold text-primary transition-colors ${
+              uploading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gold/20 cursor-pointer'
+            }`}
+          >
+            <span>📷</span> {uploading ? 'Uploading…' : value ? 'Replace Photo' : 'Upload from Device'}
           </label>
+          <input
+            id={fileInputId}
+            type="file"
+            accept="image/*"
+            onChange={pick}
+            disabled={uploading}
+            className="sr-only"
+          />
 
           {value && (
             <button
@@ -161,6 +181,7 @@ function ImgIn({ label, value, onChange, folder = 'general' }) {
     </div>
   )
 }
+
 const blank = () => ({
   id: 'kfs-' + Date.now().toString(36),
   sku: 'KFS-NEW-' + Math.floor(100 + Math.random() * 900),
@@ -370,14 +391,14 @@ const NAV=[['dash','Dashboard'],['products','Products'],['orders','Orders'],['de
 const STATUS=['Confirmed','New','Processing','Packed','Delivered','Cancelled','Refunded'],PAYMENTS=['Pending','Paid','Failed','COD','unpaid','paid'],BADGE={Confirmed:'bg-emerald-100 text-emerald-800',New:'bg-gold/30 text-gold-dark',Processing:'bg-blue-100 text-blue-800',Packed:'bg-blue-100 text-blue-800',Delivered:'bg-emerald/15 text-emerald',Cancelled:'bg-red-100 text-red-800',Refunded:'bg-red-100 text-red-800'}
 const DELIVERY_STATUS_COLOR={Confirmed:'bg-emerald-100 text-emerald-800',New:'bg-amber-100 text-amber-800',Processing:'bg-blue-100 text-blue-800',Packed:'bg-blue-100 text-blue-800',Delivered:'bg-emerald-100 text-emerald-800',Cancelled:'bg-red-100 text-red-700',Refunded:'bg-red-100 text-red-700'}
 const lines=o=>(o.items||[]).map(i=>typeof i==='string'?i:`${i.name} × ${i.q}`)
-const Stat=({t,v,onClick,icon})=><div onClick={onClick} className={'border border-gold/40 bg-white p-4 shadow-sm'+(onClick?' cursor-pointer hover:border-primary/60 hover:shadow-md transition-all group':'')}><p className="text-sm text-ink/60 flex items-center gap-2">{icon&&<span>{icon}</span>}{t}</p><p className="mt-1 font-serif text-3xl font-semibold text-primary">{v}</p>{onClick&&<p className="mt-2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Click to view →</p>}</div>
+const Stat=({t,v,onClick,icon})=><div onClick={onClick} className={'border border-gold/40 bg-white p-4 shadow-sm'+(onClick?' cursor-pointer hover:border-primary/60 hover:shadow-md transition-all group':'')}><p className="text-sm text-ink/70 flex items-center gap-2">{icon&&<span>{icon}</span>}{t}</p><p className="mt-1 font-sans text-3xl font-extrabold text-primary tabular-nums lining-nums">{v}</p>{onClick&&<p className="mt-2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Click to view →</p>}</div>
 const Badge=({s})=><span className={'rounded-full px-2.5 py-0.5 text-xs font-bold '+(BADGE[s||'New'])}>{s||'New'}</span>
 function Orders({orders,limit}){const list=limit?orders.slice(0,limit):orders
  if(!list.length)return <p className="border border-gold/40 bg-white p-8 text-center text-ink/70">No orders yet. Orders placed through the shop checkout appear here instantly.</p>
  const resendEmail=async o=>{updateOrder(o.no,{emailStatus:'sending',emailError:''});try{await sendOrderNotification(o);updateOrder(o.no,{emailStatus:'sent',emailError:''})}catch(error){updateOrder(o.no,{emailStatus:'error',emailError:error instanceof Error?error.message:'Could not send the order email.'})}}
- return <ul className="space-y-4">{list.map(o=><li key={o.no} className="border border-gold/40 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-gold/30 pb-3"><div><p className="font-bold">{o.no} <Badge s={o.status}/></p><p className="mt-1 text-xs text-ink/60">{o.at}</p></div><p className="font-serif text-xl font-semibold text-primary">{inr(o.total)}</p></div>
-  <div className="mt-4 grid gap-5 text-sm sm:grid-cols-2"><section><h3 className="font-bold">Customer &amp; delivery</h3><dl className="mt-2 space-y-1"><div><dt className="inline font-semibold">Name: </dt><dd className="inline">{o.name}</dd></div><div><dt className="inline font-semibold">Phone: </dt><dd className="inline"><a href={'tel:'+o.phone} className="underline">{o.phone}</a></dd></div><div><dt className="inline font-semibold">Email: </dt><dd className="inline"><a href={'mailto:'+o.email} className="break-all underline">{o.email}</a></dd></div><div><dt className="inline font-semibold">Address: </dt><dd className="inline text-ink/70">{o.address}</dd></div></dl></section><section><h3 className="font-bold">Items</h3><ul className="mt-2 list-inside list-disc">{lines(o).map((l,i)=><li key={i}>{l}</li>)}</ul></section></div>
-  {!limit&&<div className="mt-4 space-y-3 border-t border-gold/30 pt-3"><div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-bold">Email notification to {SHOP.email}:</span><span role={o.emailStatus==='error'?'alert':'status'}>{o.emailStatus==='sent'?'Sent':o.emailStatus==='sending'?'Sending…':o.emailStatus==='error'?'Failed':'No send record'}</span>{o.emailError&&<span className="text-red-700">{o.emailError}</span>}</div><div className="flex flex-wrap items-center gap-3"><button type="button" className={btnO} disabled={o.emailStatus==='sending'||o.emailStatus==='sent'} onClick={()=>resendEmail(o)}>{o.emailStatus==='sending'?'Sending…':o.emailStatus==='sent'?'Email sent':'Send / retry email'}</button><WhatsApp label="WhatsApp order enquiry" text={`Hello Sri Kandan Family Shop, I am enquiring about order ${o.no}.\nItems: ${lines(o).join(', ')}\nTotal: ${inr(o.total)}`}/><label className="text-sm font-bold" htmlFor={'st'+o.no}>Order status</label><select id={'st'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2" value={o.status||'New'} onChange={e=>updateOrder(o.no,{status:e.target.value})}>{STATUS.map(x=><option key={x}>{x}</option>)}</select><label className="text-sm font-bold" htmlFor={'pay'+o.no}>Payment</label><select id={'pay'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2" value={o.paymentStatus||'unpaid'} onChange={e=>updateOrder(o.no,{paymentStatus:e.target.value})}>{PAYMENTS.map(x=><option key={x} value={x}>{x}</option>)}</select><button className="ml-auto min-h-11 px-3 text-sm text-red-700 underline" onClick={()=>confirm('Delete order '+o.no+'?')&&deleteOrder(o.no)}>Delete</button></div></div>}
+ return <ul className="space-y-4">{list.map(o=><li key={o.no} className="border border-gold/40 bg-white p-4 shadow-sm sm:p-5 text-slate-900"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-gold/30 pb-3"><div><p className="font-bold text-slate-900">{o.no} <Badge s={o.status}/></p><p className="mt-1 text-xs text-slate-500">{o.at}</p></div><p className="font-serif text-xl font-bold text-primary lining-nums tabular-nums">{inr(o.total)}</p></div>
+  <div className="mt-4 grid gap-5 text-sm sm:grid-cols-2 text-slate-900"><section><h3 className="font-bold text-slate-900">Customer &amp; delivery</h3><dl className="mt-2 space-y-1 text-slate-800"><div><dt className="inline font-semibold text-slate-600">Name: </dt><dd className="inline font-medium text-slate-900">{o.name}</dd></div><div><dt className="inline font-semibold text-slate-600">Phone: </dt><dd className="inline"><a href={'tel:'+o.phone} className="underline text-primary hover:text-primary-dark font-medium">{o.phone}</a></dd></div><div><dt className="inline font-semibold text-slate-600">Email: </dt><dd className="inline"><a href={'mailto:'+o.email} className="break-all underline text-primary hover:text-primary-dark">{o.email}</a></dd></div><div><dt className="inline font-semibold text-slate-600">Address: </dt><dd className="inline text-slate-800">{o.address}</dd></div></dl></section><section><h3 className="font-bold text-slate-900">Items</h3><ul className="mt-2 list-inside list-disc text-slate-800 space-y-1">{lines(o).map((l,i)=><li key={i}>{l}</li>)}</ul></section></div>
+  {!limit&&<div className="mt-4 space-y-3 border-t border-gold/30 pt-3 text-slate-900"><div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-bold text-slate-800">Email notification to {SHOP.email}:</span><span role={o.emailStatus==='error'?'alert':'status'} className="text-slate-700">{o.emailStatus==='sent'?'Sent':o.emailStatus==='sending'?'Sending…':o.emailStatus==='error'?'Failed':'No send record'}</span>{o.emailError&&<span className="text-red-700">{o.emailError}</span>}</div><div className="flex flex-wrap items-center gap-3"><button type="button" className={btnO} disabled={o.emailStatus==='sending'||o.emailStatus==='sent'} onClick={()=>resendEmail(o)}>{o.emailStatus==='sending'?'Sending…':o.emailStatus==='sent'?'Email sent':'Send / retry email'}</button><WhatsApp label="WhatsApp order enquiry" text={`Hello Sri Kandan Family Shop, I am enquiring about order ${o.no}.\nItems: ${lines(o).join(', ')}\nTotal: ${inr(o.total)}`}/><label className="text-sm font-bold text-slate-800" htmlFor={'st'+o.no}>Order status</label><select id={'st'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900" value={o.status||'New'} onChange={e=>updateOrder(o.no,{status:e.target.value})}>{STATUS.map(x=><option key={x}>{x}</option>)}</select><label className="text-sm font-bold text-slate-800" htmlFor={'pay'+o.no}>Payment</label><select id={'pay'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900" value={o.paymentStatus||'unpaid'} onChange={e=>updateOrder(o.no,{paymentStatus:e.target.value})}>{PAYMENTS.map(x=><option key={x} value={x}>{x}</option>)}</select><button className="ml-auto min-h-11 px-3 text-sm text-red-700 underline" onClick={()=>confirm('Delete order '+o.no+'?')&&deleteOrder(o.no)}>Delete</button></div></div>}
  </li>)}</ul>}
 
 function DeliveryTracker({orders}){

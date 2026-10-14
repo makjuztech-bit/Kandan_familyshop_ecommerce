@@ -33,8 +33,8 @@ function Badge({ label, colorClass }) {
 function StatPill({ icon, label, value }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-gold/40 bg-white p-3">
-      <span className="text-xs text-ink/50 flex items-center gap-1">{icon} {label}</span>
-      <span className="font-serif text-xl font-bold text-primary">{value}</span>
+      <span className="text-xs text-ink/70 flex items-center gap-1 font-medium">{icon} {label}</span>
+      <span className="font-sans text-xl font-extrabold text-primary tabular-nums lining-nums">{value}</span>
     </div>
   )
 }
@@ -56,7 +56,7 @@ function OrderCard({ order }) {
         <span className="font-mono text-xs font-bold text-primary shrink-0">{order.no}</span>
         <Badge label={order.status || 'New'} colorClass={statusCls} />
         <Badge label={order.paymentStatus || 'Pending'} colorClass={payCls} />
-        <span className="ml-auto font-serif font-bold text-primary">{inr(order.total)}</span>
+        <span className="ml-auto font-serif font-bold text-primary tabular-nums lining-nums">{inr(order.total)}</span>
         <span className="text-xs text-ink/40">{order.at || (order.createdAt || '').slice(0, 10)}</span>
         <span className="text-ink/40 text-sm select-none">{open ? '▲' : '▼'}</span>
       </button>
