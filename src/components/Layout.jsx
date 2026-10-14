@@ -110,6 +110,19 @@ export default function Layout(){
         {SHOP.phones.map(phone=><div key={phone} className="mt-1 flex items-center gap-2 text-sm"><span aria-hidden="true">📞</span><a href={'tel:'+phone} className="hover:text-gold">{phone}</a></div>)}
         <div className="mt-1 flex items-center gap-2 text-sm"><span aria-hidden="true">✉️</span><a href={'mailto:'+SHOP.email} className="break-all hover:text-gold">{SHOP.email}</a></div>
         {Object.entries(SHOP.social).filter(([,u])=>u).map(([n,u])=><a key={n} href={u} target="_blank" rel="noreferrer" className="mr-3 text-sm underline">{n}</a>)}
+        <div className="mt-3 pt-3 border-t border-gold/20">
+          <p className="text-xs font-bold text-gold uppercase tracking-wider">Online Payments</p>
+          <a
+            href={SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 flex items-center gap-1.5 text-xs text-ivory/80 hover:text-gold transition-colors"
+          >
+            <span>💳 Razorpay & UPI:</span>
+            <span className="font-mono underline text-gold">{SHOP.razorpayHandle || '@srikandanfamilyshop'}</span>
+            <span className="text-[10px]">↗</span>
+          </a>
+        </div>
       </div>
       <div>
         <p className="font-bold text-gold">Policies</p>

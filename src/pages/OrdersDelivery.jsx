@@ -4,6 +4,7 @@ import { useOrders } from '../data/orders'
 import { useAuthStatus } from '../data/auth'
 import { inr } from '../data/products'
 import { Wrap, btnP, btnO } from '../components/ui'
+import { SHOP } from '../config/shop'
 
 // ─── Customer Orders Page ────────────────────────────────────────────────────
 export function CustomerOrders() {
@@ -73,6 +74,17 @@ export function CustomerOrders() {
                   <div className="text-right">
                     <p className="font-serif text-2xl font-bold text-primary">{inr(order.total || 0)}</p>
                     <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                      {String(order.paymentStatus).toLowerCase() !== 'paid' && String(order.paymentMethod).toLowerCase().includes('razorpay') && (
+                        <a
+                          href={SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-sm"
+                        >
+                          <span>💳 Pay via Razorpay</span>
+                          <span>↗</span>
+                        </a>
+                      )}
                       <Link to={`/order/${order.no}`} className={btnP}>View Details</Link>
                       <Link to={`/delivery?order=${order.no}`} className={btnO}>Track Delivery</Link>
                     </div>

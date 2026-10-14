@@ -3,16 +3,32 @@ import crypto from 'node:crypto'
 import { markOrderAsPaid } from './orders.js'
 
 export function registerRazorpayRoutes(app) {
+  app.get('/api/razorpay/config', (_req, res) => {
+    const key_id = process.env.RAZORPAY_KEY_ID?.trim() || ''
+    const razorpayMeUrl = process.env.RAZORPAY_ME_URL?.trim() || 'https://razorpay.me/@srikandanfamilyshop'
+    res.json({
+      configured: Boolean(key_id && process.env.RAZORPAY_KEY_SECRET?.trim()),
+      keyId: key_id,
+      razorpayMeUrl,
+    })
+  })
+
   app.post('/api/razorpay/create-order', async (req, res) => {
     try {
       const { amount, receipt } = req.body
       if (!amount) return res.status(400).json({ error: 'Amount is required' })
 
-      const key_id = process.env.RAZORPAY_KEY_ID
-      const key_secret = process.env.RAZORPAY_KEY_SECRET
+      const key_id = process.env.RAZORPAY_KEY_ID?.trim()
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim()
+      const razorpayMeUrl = process.env.RAZORPAY_ME_URL?.trim() || 'https://razorpay.me/@srikandanfamilyshop'
 
       if (!key_id || !key_secret) {
-        return res.status(503).json({ error: 'Razorpay keys not configured' })
+        return res.status(200).json({
+          configured: false,
+          useDirectLink: true,
+          razorpayMeUrl,
+          message: 'Razorpay API keys not configured. Use direct Razorpay payment link.',
+        })
       }
 
       const instance = new Razorpay({ key_id, key_secret })

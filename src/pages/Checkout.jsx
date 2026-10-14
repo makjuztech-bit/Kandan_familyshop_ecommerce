@@ -30,6 +30,8 @@ export default function Checkout(){
   const [pointsRedeemed, setPointsRedeemed] = useState(0)
   const [inputPoints, setInputPoints] = useState('')
   const [redeemError, setRedeemError] = useState('')
+  const [copiedNo, setCopiedNo] = useState(false)
+  const [paymentReported, setPaymentReported] = useState(false)
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -117,7 +119,8 @@ export default function Checkout(){
     }
     
     setEmailStatus('sending')
-    const paymentMethodVal = e.target.payment?.value || 'cod';
+    setEmailError('')
+    const paymentMethodVal = e.target.payment?.value || 'razorpay';
     const paymentMethodName = paymentMethodVal === 'razorpay' ? 'Razorpay (Card/UPI/NetBanking)' : 'Cash on Delivery (COD)';
     
     const items = lines.map(l=>({
@@ -144,68 +147,88 @@ export default function Checkout(){
 
     if (paymentMethodVal === 'razorpay') {
       try {
-        const rzRes = await fetch('/api/razorpay/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: finalTotal })
-        });
-        if (!rzRes.ok) throw new Error('Could not initialize Razorpay');
-        const rzOrder = await rzRes.json();
-        
-        const savedOrder = await addOrder(orderPayload);
-        if (!savedOrder) throw new Error('Failed to create order on server');
+        const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+        // If live/test Razorpay API credentials are configured, try in-app Razorpay modal
+        if (keyId && typeof window !== 'undefined' && window.Razorpay) {
+          try {
+            const rzRes = await fetch('/api/razorpay/create-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amount: finalTotal })
+            });
+            const rzData = await rzRes.json();
+            if (rzRes.ok && rzData && rzData.id && !rzData.useDirectLink) {
+              const savedOrder = await addOrder(orderPayload);
+              if (!savedOrder) throw new Error('Failed to create order on server');
 
-        const options = {
-          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-          amount: rzOrder.amount,
-          currency: rzOrder.currency,
-          name: SHOP.name,
-          description: 'Order Payment',
-          order_id: rzOrder.id,
-          handler: async function (response) {
-            try {
-              const verifyRes = await fetch('/api/razorpay/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                  order_no: savedOrder.no
-                })
-              });
-              
-              if (verifyRes.ok) {
-                setOrder({...savedOrder, paymentStatus: 'Paid'});
+              const options = {
+                key: keyId,
+                amount: rzData.amount,
+                currency: rzData.currency || 'INR',
+                name: SHOP.name,
+                description: `Order ${savedOrder.no}`,
+                order_id: rzData.id,
+                handler: async function (response) {
+                  try {
+                    const verifyRes = await fetch('/api/razorpay/verify', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature,
+                        order_no: savedOrder.no
+                      })
+                    });
+                    if (verifyRes.ok) {
+                      setOrder({ ...savedOrder, paymentStatus: 'Paid' });
+                      clear();
+                    } else {
+                      setOrder(savedOrder);
+                      clear();
+                    }
+                  } catch {
+                    setOrder(savedOrder);
+                    clear();
+                  }
+                },
+                prefill: { name: v.name, email: v.email, contact: v.phone },
+                theme: { color: '#4a0e18' }
+              };
+              const rzp = new window.Razorpay(options);
+              rzp.on('payment.failed', function () {
+                setOrder(savedOrder);
                 clear();
-              } else {
-                setEmailStatus('error');
-                setEmailError('Payment verification failed.');
-              }
-            } catch(e) {
-              setEmailStatus('error');
-              setEmailError('Failed to verify payment.');
+              });
+              rzp.open();
+              setEmailStatus('idle');
+              return;
             }
-          },
-          prefill: { name: v.name, email: v.email, contact: v.phone },
-          theme: { color: '#4a0e18' }
-        };
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function () {
-          setEmailStatus('error');
-          setEmailError('Payment was cancelled or failed.');
-        });
-        rzp.open();
+          } catch (modalErr) {
+            console.info('Switching to direct Razorpay portal:', modalErr);
+          }
+        }
 
+        // Direct Razorpay.me payment flow (@srikandanfamilyshop)
+        const savedOrder = await addOrder(orderPayload);
+        if (savedOrder) {
+          setOrder(savedOrder);
+          clear();
+          setEmailStatus('idle');
+        } else {
+          setEmailStatus('error');
+          setEmailError('Failed to create order on server');
+        }
       } catch(err) {
         setEmailStatus('error');
-        setEmailError(err.message || 'Razorpay error');
+        setEmailError(err.message || 'Razorpay order error');
       }
     } else {
       const savedOrder = await addOrder(orderPayload);
       if (savedOrder) {
         setOrder(savedOrder);
         clear();
+        setEmailStatus('idle');
       } else {
         setEmailStatus('error');
         setEmailError('Failed to create order on server');
@@ -214,25 +237,143 @@ export default function Checkout(){
   }
 
   if(order){
-   return <Wrap className="max-w-2xl py-12"><div className="border border-emerald/40 bg-white p-8 shadow-sm rounded-xl"><h1 className="text-3xl text-emerald-800 font-serif">Order Confirmed!</h1><p className="mt-2 text-lg">Order number: <b className="font-mono text-primary">{order.no}</b></p><p className="text-sm text-ink/70">Thank you for shopping with Sri Kandan Family Shop.</p>
-   
-   {order.pointsAwarded && order.pointsEarned > 0 ? (
-     <div className="mt-4 bg-emerald/10 text-emerald-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-emerald-300">
-       <span className="text-xl">💎</span>
-       <span>You earned <strong>{order.pointsEarned} loyalty points</strong> on this order! Available in your account.</span>
-     </div>
-   ) : estimatedPointsEarned > 0 ? (
-     <div className="mt-4 bg-emerald/10 text-emerald-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-emerald-300">
-       <span className="text-xl">💎</span>
-       <span>You will earn <strong>{estimatedPointsEarned} loyalty points</strong> upon order delivery!</span>
-     </div>
-   ) : null}
-   
-   <ul className="mt-4 divide-y divide-gold/40">{order.items.map(l=><li key={l.id || l.productId || l.name} className="flex justify-between py-2"><span>{l.name} × {l.q}</span><span>{inr(l.price*l.q)}</span></li>)}</ul>
-   <p className="mt-3 flex justify-between text-lg font-bold border-t border-gold/40 pt-3"><span>Total Paid</span><span>{inr(order.total)}</span></p>
-   <div className="mt-4 space-y-1 border-t border-gold/40 pt-4 text-sm text-ink/80"><p><b>Delivery address:</b> {order.address}</p><p><b>Customer:</b> {order.name}</p><p><b>Customer email:</b> {order.email}</p><p><b>Payment:</b> {order.paymentMethod}</p></div>
-   
-   <Link to="/shop" className={btnP+' mt-5 block text-center'}>Continue shopping</Link></div></Wrap>}
+   const isRazorpay = (order.paymentMethod || '').toLowerCase().includes('razorpay');
+   const isPaid = (order.paymentStatus || '').toLowerCase() === 'paid';
+   const razorpayUrl = SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop';
+
+   return (
+    <Wrap className="max-w-2xl py-12">
+      <div className="border border-emerald-500/40 bg-white p-6 sm:p-8 shadow-md rounded-2xl">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-800">✓</span>
+          <div>
+            <h1 className="text-3xl text-emerald-800 font-serif">Order Confirmed!</h1>
+            <p className="text-sm text-ink/70">Thank you for shopping with Sri Kandan Family Shop.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-xl bg-ivory/60 border border-gold/30 p-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-ink/60">Order Number</p>
+            <p className="font-mono text-xl font-bold text-primary">{order.no}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(order.no);
+                setCopiedNo(true);
+                setTimeout(() => setCopiedNo(false), 2500);
+              }
+            }}
+            className="rounded-lg border border-gold/40 bg-white px-3 py-1.5 text-xs font-semibold text-primary hover:bg-gold/10 transition-colors shadow-sm"
+          >
+            {copiedNo ? '✓ Copied' : '📋 Copy Order No'}
+          </button>
+        </div>
+
+        {/* Dedicated Razorpay Payment Card for Online Orders */}
+        {isRazorpay && !isPaid && (
+          <div className="mt-6 rounded-2xl border-2 border-emerald-600/30 bg-gradient-to-br from-emerald-50/80 via-white to-amber-50/50 p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-200/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">💳</span>
+                <div>
+                  <h3 className="font-bold text-emerald-950 text-base">Pay via Razorpay / UPI</h3>
+                  <p className="text-xs text-emerald-800/80">
+                    Official Handle: <strong className="font-mono text-primary font-bold">{SHOP.razorpayHandle || '@srikandanfamilyshop'}</strong>
+                  </p>
+                </div>
+              </div>
+              <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-0.5 text-xs font-bold text-amber-900">
+                Amount to Pay: {inr(order.total)}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2 text-xs sm:text-sm text-ink/80 bg-white rounded-xl p-4 border border-gold/20 shadow-xs">
+              <p className="font-bold text-primary text-xs uppercase tracking-wider">Quick Steps to Complete Payment:</p>
+              <ol className="list-decimal list-inside space-y-1 text-ink/80">
+                <li>Click <strong>“Pay {inr(order.total)} on Razorpay”</strong> below to open our official page.</li>
+                <li>Enter the exact amount: <strong className="text-emerald-800">{inr(order.total)}</strong></li>
+                <li>In the comment field, paste your Order Number: <strong className="font-mono text-primary">{order.no}</strong></li>
+                <li>Complete your payment via Google Pay, PhonePe, Paytm, any UPI app, Debit/Credit Card, or NetBanking.</li>
+              </ol>
+            </div>
+
+            <div className="mt-5 flex flex-col sm:flex-row gap-3">
+              <a
+                href={razorpayUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900 text-white font-bold py-3.5 px-6 rounded-xl shadow-md transition-all hover:shadow-lg flex items-center justify-center gap-2 text-base"
+              >
+                <span>Pay {inr(order.total)} on Razorpay</span>
+                <span className="text-base">↗</span>
+              </a>
+
+              <a
+                href={`https://wa.me/${SHOP.whatsapp}?text=${encodeURIComponent(`Hello Sri Kandan Family Shop, I placed order ${order.no} for ${inr(order.total)}. I am paying via Razorpay (@srikandanfamilyshop).`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border border-emerald-600/30 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm"
+              >
+                <span>💬 WhatsApp Us</span>
+              </a>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-emerald-200/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-ink/60">Already paid?</span>
+              <button
+                type="button"
+                onClick={() => setPaymentReported(true)}
+                className={`rounded-lg px-3 py-1 font-semibold transition-colors ${
+                  paymentReported
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white border border-gold/40 text-primary hover:bg-gold/10'
+                }`}
+              >
+                {paymentReported ? '✓ Payment Submitted for Verification' : 'I have completed this payment'}
+              </button>
+            </div>
+
+            {paymentReported && (
+              <p className="mt-2 text-xs text-emerald-800 bg-emerald-100/70 p-2.5 rounded-lg border border-emerald-300">
+                🎉 Thank you! Our accounts team will reconcile your payment with Order <strong>{order.no}</strong> and dispatch your parcel swiftly.
+              </p>
+            )}
+          </div>
+        )}
+
+        {order.pointsAwarded && order.pointsEarned > 0 ? (
+          <div className="mt-4 bg-emerald/10 text-emerald-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-emerald-300">
+            <span className="text-xl">💎</span>
+            <span>You earned <strong>{order.pointsEarned} loyalty points</strong> on this order! Available in your account.</span>
+          </div>
+        ) : estimatedPointsEarned > 0 ? (
+          <div className="mt-4 bg-emerald/10 text-emerald-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-emerald-300">
+            <span className="text-xl">💎</span>
+            <span>You will earn <strong>{estimatedPointsEarned} loyalty points</strong> upon order delivery!</span>
+          </div>
+        ) : null}
+
+        <ul className="mt-4 divide-y divide-gold/40">{order.items.map(l=><li key={l.id || l.productId || l.name} className="flex justify-between py-2 text-sm"><span>{l.name} × {l.q}</span><span className="font-semibold">{inr(l.price*l.q)}</span></li>)}</ul>
+        <p className="mt-3 flex justify-between text-lg font-bold border-t border-gold/40 pt-3"><span>Total Amount</span><span className="text-primary">{inr(order.total)}</span></p>
+        <div className="mt-4 space-y-1 border-t border-gold/40 pt-4 text-sm text-ink/80">
+          <p><b>Delivery address:</b> {order.address}</p>
+          <p><b>Customer:</b> {order.name}</p>
+          <p><b>Customer email:</b> {order.email}</p>
+          <p><b>Payment Method:</b> {order.paymentMethod}</p>
+          <p><b>Payment Status:</b> <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{isPaid ? 'Paid' : 'Pending Verification'}</span></p>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link to="/orders" className={btnP + ' flex-1 text-center'}>View My Orders</Link>
+          <Link to="/shop" className={btnO + ' flex-1 text-center'}>Continue Shopping</Link>
+        </div>
+      </div>
+    </Wrap>
+   );
+  }
   if(!lines.length)return <Wrap className="py-12 text-center"><h1 className="text-3xl font-serif">Your Cart is Empty</h1><Link to="/shop" className={btnP+' mt-6'}>Browse collections</Link></Wrap>
  
   return (
@@ -253,21 +394,29 @@ export default function Checkout(){
           <div className="space-y-4">
             <h2 className="text-2xl font-serif text-primary border-b border-gold/30 pb-2">2. Secure Payment Method</h2>
             <div className="flex flex-col gap-3">
-              <label className="flex items-center gap-3 p-4 border border-primary/40 rounded-lg cursor-pointer bg-primary/5 hover:bg-primary/10 transition-colors">
-                <input type="radio" name="payment" value="razorpay" defaultChecked className="accent-primary w-4 h-4" />
+              <label className="flex items-start gap-3 p-4 border-2 border-primary/40 rounded-xl cursor-pointer bg-primary/5 hover:bg-primary/10 transition-colors">
+                <input type="radio" name="payment" value="razorpay" defaultChecked className="accent-primary w-4 h-4 mt-1" />
                 <div className="flex-1">
-                  <span className="block font-bold text-sm text-primary">Razorpay (Cards / UPI / NetBanking)</span>
-                  <span className="block text-xs text-ink/60 mt-0.5">Secure payment gateway</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="block font-bold text-sm text-primary">Razorpay (Cards / UPI / NetBanking)</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-300">Fast & Verified</span>
+                  </div>
+                  <span className="block text-xs text-ink/70 mt-1">
+                    Pay securely to <strong>{SHOP.razorpayHandle || '@srikandanfamilyshop'}</strong> via Google Pay, PhonePe, Paytm, UPI, Cards, or NetBanking.
+                  </span>
                 </div>
-                <span className="text-xl">💳</span>
+                <div className="flex items-center gap-1.5 shrink-0 text-xl">
+                  <span title="UPI & Cards">💳</span>
+                  <span title="Instant Mobile UPI">📱</span>
+                </div>
               </label>
-              <label className="flex items-center gap-3 p-4 border border-gold/40 rounded-lg cursor-pointer bg-white hover:bg-ivory/50 transition-colors">
-                <input type="radio" name="payment" value="cod" className="accent-primary w-4 h-4" />
+              <label className="flex items-start gap-3 p-4 border border-gold/40 rounded-xl cursor-pointer bg-white hover:bg-ivory/50 transition-colors">
+                <input type="radio" name="payment" value="cod" className="accent-primary w-4 h-4 mt-1" />
                 <div className="flex-1">
                   <span className="block font-bold text-sm text-ink">Cash on Delivery (COD)</span>
-                  <span className="block text-xs text-ink/60 mt-0.5">Pay when you receive the order</span>
+                  <span className="block text-xs text-ink/60 mt-0.5">Pay in cash when you receive the package at your doorstep</span>
                 </div>
-                <span className="text-xl">🚚</span>
+                <span className="text-xl shrink-0">🚚</span>
               </label>
             </div>
           </div>
@@ -275,6 +424,7 @@ export default function Checkout(){
           <button className={btnP + ' w-full py-4 text-lg font-bold tracking-wide'} disabled={emailStatus==='sending'}>
             {emailStatus==='sending' ? 'Processing...' : `Place Secure Order — ${inr(finalTotal)}`}
           </button>
+          {emailError && <p className="text-red-600 text-sm font-semibold">{emailError}</p>}
         </form>
         
         <aside className="h-fit space-y-4">

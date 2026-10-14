@@ -17,6 +17,7 @@ import {
 import { byId, inr, products } from '../data/products'
 import { Wrap, Field, Img, btnP, btnO, validate } from '../components/ui'
 import {CustomerReviews} from '../components/Reviews'
+import { SHOP } from '../config/shop'
 import {ReviewSummary,ProductSalesSummary} from '../components/Rating'
 
 export function Login() {
@@ -650,7 +651,28 @@ export function OrderDetails() {
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Delivery details</h2><p className="mt-3 font-bold">{order.name}</p><p className="mt-1 text-sm text-ink/70">{order.address}</p><p className="mt-2 text-sm text-ink/70">{order.phone}</p><p className="break-all text-sm text-ink/70">{order.email}</p></section>
-          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Payment summary</h2><div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right">{order.paymentMethod||'Not recorded'}</span></div><div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div><p className="mt-3 text-xs text-ink/60">Payment is processed securely through our payment gateway.</p></section>
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
+            <h2 className="text-xl">Payment summary</h2>
+            <div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right font-medium">{order.paymentMethod||'Not recorded'}</span></div>
+            <div className="mt-2 flex justify-between gap-3 text-sm"><span>Payment status</span><span className={`capitalize font-bold text-xs px-2 py-0.5 rounded ${paymentStatus==='paid'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{paymentStatus}</span></div>
+            <div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div>
+            {paymentStatus !== 'paid' && String(order.paymentMethod).toLowerCase().includes('razorpay') && (
+              <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/70 p-3 text-center">
+                <p className="text-xs font-bold text-emerald-800">Payment Pending via Razorpay</p>
+                <a
+                  href={SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-4 py-2 text-xs font-bold text-white transition-colors shadow-sm"
+                >
+                  <span>Pay {inr(order.total||0)} on Razorpay</span>
+                  <span>↗</span>
+                </a>
+                <p className="mt-1.5 text-[11px] text-emerald-700">Please enter Order #{order.no} in payment comment</p>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-ink/60">Payment is processed securely through our payment gateway.</p>
+          </section>
         </aside>
       </div>
 

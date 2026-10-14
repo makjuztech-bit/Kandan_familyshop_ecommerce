@@ -444,6 +444,19 @@ export async function sendOrderConfirmationEmail(order) {
             <strong>Payment Status:</strong> ${order.paymentStatus}
           </div>
 
+          ${
+            order.paymentMethod?.toLowerCase().includes('razorpay') && order.paymentStatus?.toLowerCase() !== 'paid'
+              ? `
+          <div style="margin: 20px 0; padding: 18px; background: #f0fdf4; border: 2px dashed #10b981; border-radius: 8px; text-align: center;">
+            <p style="margin: 0 0 6px; font-weight: bold; font-size: 15px; color: #065f46;">Pay Securely via Razorpay / UPI</p>
+            <p style="margin: 0 0 12px; font-size: 13px; color: #047857;">Click the button below to pay <strong>₹${Number(order.total).toLocaleString('en-IN')}</strong> to <strong>@srikandanfamilyshop</strong> using Google Pay, PhonePe, Paytm, UPI, Cards, or NetBanking:</p>
+            <a href="https://razorpay.me/@srikandanfamilyshop" target="_blank" style="display: inline-block; background-color: #047857; color: #ffffff; text-decoration: none; padding: 12px 24px; font-weight: bold; font-size: 14px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">Pay ₹${Number(order.total).toLocaleString('en-IN')} on Razorpay</a>
+            <p style="margin: 10px 0 0; font-size: 11px; color: #065f46;">Please write your Order Number <strong>${order.no}</strong> in the payment comment for instant reconciliation.</p>
+          </div>
+          `
+              : ''
+          }
+
           <h3 style="font-size: 16px; color: #4a0e18; border-bottom: 2px solid #b8964f; padding-bottom: 6px; margin-top: 24px;">Delivery Address</h3>
           <p style="font-size: 14px; line-height: 1.5; margin: 8px 0;">
             ${order.name}<br>
@@ -501,6 +514,9 @@ export async function sendOrderConfirmationEmail(order) {
     itemsListText,
     ``,
     `Grand Total: ₹${Number(order.total).toLocaleString('en-IN')}`,
+    order.paymentMethod?.toLowerCase().includes('razorpay') && order.paymentStatus?.toLowerCase() !== 'paid'
+      ? `\nTo pay online via Razorpay, please open: https://razorpay.me/@srikandanfamilyshop\nAmount: ₹${Number(order.total).toLocaleString('en-IN')}\nPayment Comment: ${order.no}\n`
+      : '',
     ``,
     `Thank you for shopping with Kandan Family Shop!`,
     `Showroom: No. 1A, Thiruchakkarapuram Street, Kanchipuram - 631 501`,
