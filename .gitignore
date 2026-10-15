@@ -5,3 +5,4 @@ server/data/
 **/server/data/
 node_modules/
 dist/
+.firebase/
