@@ -53,6 +53,8 @@ database.exec(`
 // Safe schema migrations for payment columns & loyalty points
 try { database.exec(`ALTER TABLE orders ADD COLUMN payment_id TEXT DEFAULT ''`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN razorpay_order_id TEXT DEFAULT ''`) } catch {}
+try { database.exec(`CREATE INDEX IF NOT EXISTS idx_orders_rzp_order ON orders(razorpay_order_id)`) } catch {}
+try { database.exec(`CREATE INDEX IF NOT EXISTS idx_orders_payment_id ON orders(payment_id)`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_earned INTEGER DEFAULT 0`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_redeemed INTEGER DEFAULT 0`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_discount REAL DEFAULT 0`) } catch {}
@@ -89,6 +91,10 @@ const selectAllStmt = database.prepare(`
 
 const selectByNoStmt = database.prepare(`
   SELECT * FROM orders WHERE no = ? LIMIT 1
+`)
+
+const selectByRazorpayOrderIdStmt = database.prepare(`
+  SELECT * FROM orders WHERE razorpay_order_id = ? LIMIT 1
 `)
 
 const updateEmailStmt = database.prepare(`
@@ -161,9 +167,19 @@ function formatRow(row) {
  * Saves a new validated order to the SQLite database and Supabase (if configured).
  */
 export function saveOrderToDatabase(orderData) {
-  const id = 'ord_' + randomUUID()
   const randomSuffix = randomBytes(2).toString('hex').toUpperCase()
-  const no = 'KFS-' + Date.now().toString(36).toUpperCase() + '-' + randomSuffix
+  const no = (orderData.no && /^KFS-[A-Z0-9-]{4,40}$/.test(orderData.no))
+    ? orderData.no
+    : ('KFS-' + Date.now().toString(36).toUpperCase() + '-' + randomSuffix)
+
+  // Idempotency: If order already exists in SQLite, return or update it
+  const existingOrder = getOrderByNo(no)
+  if (existingOrder) {
+    console.log('ℹ️ Order already exists in database, returning existing record:', no)
+    return existingOrder
+  }
+
+  const id = 'ord_' + randomUUID()
   const createdAt = new Date().toISOString()
 
   const subtotal = Number(orderData.subtotal ?? orderData.total)
@@ -173,8 +189,16 @@ export function saveOrderToDatabase(orderData) {
   const total = Number(orderData.total)
 
   const paymentMethod = orderData.paymentMethod || 'Cash on Delivery (COD)'
-  const paymentStatus = orderData.paymentStatus || (paymentMethod.includes('COD') ? 'Pending' : 'Paid')
-  const orderStatus = orderData.orderStatus || 'Confirmed'
+  const isOnline = paymentMethod.toLowerCase().includes('razorpay') || paymentMethod.toLowerCase().includes('online') || paymentMethod.toLowerCase().includes('card') || paymentMethod.toLowerCase().includes('upi')
+
+  // Rule: Online orders must NOT be confirmed before payment is verified!
+  // If online, order starts as 'Pending Payment' / 'Pending'
+  // If COD, order starts as 'Confirmed' / 'Pending'
+  const paymentStatus = orderData.paymentStatus || 'Pending'
+  const orderStatus = isOnline
+    ? (paymentStatus === 'Paid' ? 'Confirmed' : 'Pending Payment')
+    : (orderData.orderStatus || 'Confirmed')
+
   const itemsJson = JSON.stringify(orderData.items || [])
   const paymentId = (orderData.paymentId || '').trim()
   const razorpayOrderId = (orderData.razorpayOrderId || '').trim()
@@ -210,7 +234,7 @@ export function saveOrderToDatabase(orderData) {
       0, // points_awarded (default false)
       0  // points_reversed (default false)
     )
-    console.log('✅ Order record created in database:', no)
+    console.log(`✅ Order record created in database: ${no} [Status: ${orderStatus}, Payment: ${paymentStatus}]`)
   } catch (dbErr) {
     console.error('❌ Database error:', dbErr.message)
     throw new Error('Database insertion failed: ' + dbErr.message)
@@ -243,15 +267,18 @@ export function saveOrderToDatabase(orderData) {
       pointsRedeemed = loyaltyResult.pointsRedeemed
       pointsDiscount = loyaltyResult.discountApplied
       newLoyaltyBalance = loyaltyResult.newBalance
-      console.log(`✅ [Loyalty] Order ${no}: +${pointsEarned} pts awarded automatically (Balance: ${newLoyaltyBalance} pts)`)
+      if (isEligibleForEarning) {
+        console.log(`✅ [Loyalty] Order ${no}: +${pointsEarned} pts awarded automatically (Balance: ${newLoyaltyBalance} pts)`)
+      }
     } catch (loyaltyErr) {
       console.warn('⚠️ Loyalty points calculation error:', loyaltyErr.message)
     }
   }
 
-  // Dispatch automated WhatsApp notification asynchronously
+  // Dispatch automated WhatsApp notification asynchronously ONLY for confirmed orders (e.g. COD)
+  // For online Razorpay orders, notification is dispatched when payment is confirmed!
   const formattedOrder = getOrderByNo(no) || { ...orderData, no }
-  if (orderData.phone) {
+  if (orderStatus === 'Confirmed' && orderData.phone) {
     try {
       const waMsg = formatOrderPlacedMessage(formattedOrder)
       sendWhatsAppNotification({
@@ -344,12 +371,33 @@ export function getOrderByNo(no) {
   return formatRow(row)
 }
 
+export function getOrderByRazorpayOrderId(razorpayOrderId) {
+  if (!razorpayOrderId) return null
+  try {
+    const row = selectByRazorpayOrderIdStmt.get(razorpayOrderId)
+    return formatRow(row)
+  } catch {
+    return null
+  }
+}
+
 export function updateOrderInDatabase(no, patch = {}) {
   const orderStatus = patch.orderStatus || patch.status || null
   const paymentStatus = patch.paymentStatus || null
   
   if (orderStatus || paymentStatus) {
     updateStatusStmt.run(orderStatus, paymentStatus, no)
+  }
+
+  if (patch.razorpayOrderId || patch.paymentId) {
+    try {
+      database.prepare(`
+        UPDATE orders 
+        SET razorpay_order_id = COALESCE(?, razorpay_order_id),
+            payment_id = COALESCE(?, payment_id)
+        WHERE no = ?
+      `).run(patch.razorpayOrderId || null, patch.paymentId || null, no)
+    } catch {}
   }
   
   // Handle Cancellation or Refund reversal automatically
@@ -448,26 +496,89 @@ export function deleteOrderFromDatabase(no) {
   }
 }
 
-export function markOrderAsPaid(no, { paymentId, paymentMethod = 'UPI / Online (Razorpay)' }) {
+export function markOrderAsPaid(no, { paymentId = '', paymentMethod = 'Razorpay (Online)', razorpayOrderId = '' } = {}) {
   try {
     database.prepare(`
-      UPDATE orders SET payment_status = 'Paid', payment_method = ?, payment_id = ? WHERE no = ?
-    `).run(paymentMethod, paymentId || '', no)
+      UPDATE orders 
+      SET payment_status = 'Paid',
+          order_status = 'Confirmed',
+          payment_method = COALESCE(NULLIF(?, ''), payment_method),
+          payment_id = COALESCE(NULLIF(?, ''), payment_id),
+          razorpay_order_id = COALESCE(NULLIF(?, ''), razorpay_order_id)
+      WHERE no = ?
+    `).run(paymentMethod, paymentId, razorpayOrderId, no)
 
-    // Automatically award loyalty points if not already awarded
     const order = getOrderByNo(no)
-    if (order && !order.pointsAwarded) {
-      processOrderLoyalty({
-        orderNo: no,
-        email: order.email,
-        name: order.name,
-        phone: order.phone,
-        eligibleAmount: Math.max(0, order.total),
-        items: order.items || [],
-      })
+    if (order) {
+      console.log(`✅ [Payment Verified] Order ${no} marked as Paid & Confirmed (Payment ID: ${paymentId})`)
+
+      // Automatically award loyalty points if not already awarded
+      if (!order.pointsAwarded) {
+        try {
+          processOrderLoyalty({
+            orderNo: no,
+            email: order.email,
+            name: order.name,
+            phone: order.phone,
+            eligibleAmount: Math.max(0, order.total),
+            items: order.items || [],
+          })
+        } catch (loyaltyErr) {
+          console.warn('[Loyalty Notice]:', loyaltyErr.message)
+        }
+      }
+
+      // Dispatch order confirmation email now that payment is confirmed
+      sendOrderConfirmationEmail(order).catch(console.error)
+
+      // Dispatch WhatsApp confirmation
+      if (order.phone) {
+        try {
+          const waMsg = formatOrderPlacedMessage(order)
+          sendWhatsAppNotification({
+            toPhone: order.phone,
+            message: waMsg,
+            orderNo: no,
+            eventType: 'order_placed',
+          }).catch(console.error)
+        } catch (waErr) {
+          console.warn('[WhatsApp Notice]:', waErr.message)
+        }
+      }
+
+      // Sync to Supabase if configured
+      if (isServerSupabaseConfigured && supabaseServer) {
+        supabaseServer
+          .from('orders')
+          .update({
+            payment_status: 'Paid',
+            order_status: 'Confirmed',
+            payment_id: paymentId,
+            razorpay_order_id: razorpayOrderId,
+          })
+          .eq('no', no)
+          .then(({ error }) => { if (error) console.warn('[Supabase Sync Order Paid]', error.message) })
+          .catch(() => {})
+      }
     }
   } catch (err) {
     console.error('Error marking order as paid:', err.message)
+  }
+  return getOrderByNo(no)
+}
+
+export function markOrderPaymentFailed(no, { error_code = '', error_description = '', payment_id = '', razorpay_order_id = '' } = {}) {
+  try {
+    database.prepare(`
+      UPDATE orders 
+      SET payment_status = 'Failed',
+          payment_id = COALESCE(NULLIF(?, ''), payment_id),
+          razorpay_order_id = COALESCE(NULLIF(?, ''), razorpay_order_id)
+      WHERE no = ? AND payment_status != 'Paid'
+    `).run(payment_id, razorpay_order_id, no)
+    console.log(`⚠️ Order ${no} payment marked as Failed: ${error_description || error_code}`)
+  } catch (err) {
+    console.error('Error marking payment failed:', err.message)
   }
   return getOrderByNo(no)
 }

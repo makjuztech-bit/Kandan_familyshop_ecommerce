@@ -68,9 +68,11 @@ function normalizeOrder(order) {
     items = order.items_json
   }
 
-  const status = order.status || order.order_status || order.orderStatus || 'Confirmed'
-  const paymentStatus = order.paymentStatus || order.payment_status || 'Pending'
   const paymentMethod = order.paymentMethod || order.payment_method || 'COD'
+  const isOnlinePayment = paymentMethod.toLowerCase().includes('razorpay') || paymentMethod.toLowerCase().includes('online') || paymentMethod.toLowerCase().includes('card') || paymentMethod.toLowerCase().includes('upi')
+  const paymentStatus = order.paymentStatus || order.payment_status || 'Pending'
+  const isPaid = paymentStatus.toLowerCase() === 'paid'
+  const status = order.orderStatus || order.order_status || order.status || (isOnlinePayment && !isPaid ? 'Pending Payment' : 'Confirmed')
 
   return {
     ...order,
@@ -90,6 +92,8 @@ function normalizeOrder(order) {
     orderStatus: status,
     paymentStatus,
     paymentMethod,
+    paymentId: order.paymentId || order.payment_id || '',
+    razorpayOrderId: order.razorpayOrderId || order.razorpay_order_id || '',
     items,
     createdAt,
     at,

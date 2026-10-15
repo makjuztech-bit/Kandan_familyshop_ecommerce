@@ -22,7 +22,20 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
 const ADMIN_TOKEN = process.env.REVIEWS_ADMIN_TOKEN || 'asdfqwerzxcvpoiu1234567890abcdef'
 
 app.disable('x-powered-by')
-app.use(express.json({ limit: '25mb', type: 'application/json' }))
+app.use(express.json({ 
+  limit: '25mb', 
+  type: 'application/json',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf
+  }
+}))
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '25mb',
+  verify: (req, _res, buf) => { 
+    if (!req.rawBody) req.rawBody = buf 
+  } 
+}))
 
 // Serve uploaded assets statically as persistent fallback
 app.use('/images/uploads', express.static(resolve(root, '../public/images/uploads')))
@@ -237,8 +250,11 @@ app.post('/api/orders', async (req, res) => {
     const orderData = req.body
     const order = saveOrderToDatabase(orderData)
     
-    // Attempt to send email asynchronously (do not block)
-    sendOrderConfirmationEmail(order).catch(console.error)
+    // Attempt to send email asynchronously ONLY if order is already confirmed (e.g. COD)
+    // For online Razorpay orders, email is sent after payment verification
+    if (order.orderStatus === 'Confirmed' || order.status === 'Confirmed') {
+      sendOrderConfirmationEmail(order).catch(console.error)
+    }
 
     res.json({ ok: true, order })
   } catch (err) {
