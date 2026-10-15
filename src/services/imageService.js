@@ -36,7 +36,7 @@ export const WEBSITE_SECTIONS = [
   { key: 'hero', name: 'Hero Main Showroom Banner', defaultUrl: IMG.hero },
   { key: 'banner', name: 'Promotional Mid Banner', defaultUrl: IMG.banner },
   { key: 'about', name: 'About Us Showroom Feature', defaultUrl: IMG.about },
-  { key: 'family', name: 'Founders / Family Showcase', defaultUrl: '/images/kandan-family.jpg' },
+  { key: 'family', name: 'Founders / Family Showcase', defaultUrl: '/images/kandan-family.jpg?v=2' },
   { key: 'bridal', name: 'Bridal Collection Card', defaultUrl: IMG.collections['Bridal Collection'] },
   { key: 'soft_silk', name: 'Soft Silk Collection Card', defaultUrl: IMG.collections['Soft Silk'] },
   { key: 'shirts', name: 'Shirts Collection Card', defaultUrl: IMG.collections['Shirts'] },

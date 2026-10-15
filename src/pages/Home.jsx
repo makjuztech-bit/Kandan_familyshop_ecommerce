@@ -98,7 +98,7 @@ export default function Home() {
             <div className="lg:col-span-5 overflow-hidden rounded-xl border-2 border-gold/40 shadow-md">
               <div className="aspect-[4/3] overflow-hidden bg-ivory-dark">
                 <img
-                  src="/images/kandan-family.jpg"
+                  src="/images/kandan-family.jpg?v=2"
                   alt="Sri Kandan Family Shop Founders"
                   className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
                 />

@@ -42,7 +42,7 @@ export function Contact() {
           <div className="overflow-hidden rounded-2xl border-2 border-gold/40 bg-white shadow-md">
             <div className="aspect-[4/3] sm:aspect-[16/11] overflow-hidden bg-ivory-dark">
               <img
-                src="/images/kandan-family.jpg"
+                src="/images/kandan-family.jpg?v=2"
                 alt="Sri Kandan Family Shop Founders"
                 className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
               />
