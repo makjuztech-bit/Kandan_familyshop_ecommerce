@@ -620,7 +620,7 @@ export async function sendOrderConfirmationEmail(order) {
       : '',
     ``,
     `Thank you for shopping with Kandan Family Shop!`,
-    `Showroom: No. 1A, Thiruchakkarapuram Street, Kanchipuram - 631 501`,
+    `Showroom: No. 1A, Thiruchakkarapuram Street, Thirukalimedu Main Road, Kanchipuram - 631 501`,
   ].join('\n')
 
   try {

@@ -1,6 +1,6 @@
 // EDIT HERE: shop details, social links and image paths (files live in /public/images)
 export const SHOP={name:'Sri Kandan Family Shop',
- address:'No. 1A, Thiruchakkarapuram Street, Thirukalimedu main (Near Aruna Theatre – Opposite Street), Kanchipuram – 631 501, Tamil Nadu, India.',phone:'04446621728',phones:['04446621728','8925155521','8925155526'],phoneDisplay:'04446 621728 / 89251 55521 / 89251 55526',
+ address:'No. 1A, Thiruchakkarapuram Street, Thirukalimedu Main Road (Near Aruna Theatre – Opposite Street), Kanchipuram – 631 501, Tamil Nadu, India.',phone:'04448112626',phones:['04448112626','8925155521','8925155526'],phoneDisplay:'+91 4448112626 / 89251 55521 / 89251 55526',
  email:'srikandanfamilyshop11726@gmail.com',hours:'9am to 9pm',whatsapp:'918925155521',
  social:{Instagram:'',Facebook:'',YouTube:''},mapUrl:'',
  razorpayUrl:'https://razorpay.me/@srikandanfamilyshop',

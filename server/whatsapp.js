@@ -41,7 +41,7 @@ ${items}
 🚚 *Track Delivery Live:*
 https://kandan-ecommerce.web.app/delivery?order=${encodeURIComponent(order.no)}
 
-For any enquiries, reply here or call us at 04446 621728 / 89251 55521.
+For any enquiries, reply here or call us at +91 4448112626 / 89251 55521.
 *Sri Kandan Family Shop, Kanchipuram*`
 }
 
