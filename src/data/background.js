@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
+import { parseJsonSafe } from '../lib/api'
 
 export const DEFAULT_BACKGROUND = '/images/hero-silk-showroom.jpg?v=2'
 const STORAGE_KEY = 'kfs_website_background'
@@ -103,8 +104,8 @@ async function idbDelete(key) {
 export async function syncBackgroundWithServer() {
   try {
     const res = await fetch(`${API_BASE}/api/settings`)
-    if (res.ok) {
-      const data = await res.json()
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok) {
       const serverBg = data.background || data.hero
       if (serverBg && typeof serverBg === 'string' && serverBg.trim() && serverBg !== currentBackground) {
         currentBackground = serverBg.trim()

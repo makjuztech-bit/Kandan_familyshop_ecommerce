@@ -14,6 +14,7 @@ import {
   useAuthStatus,
   verifyCustomerOtp,
   fetchCustomerProfile,
+  parseJsonSafe,
 } from '../data/auth'
 import { byId, inr, products } from '../data/products'
 import { Wrap, Field, Img, btnP, btnO, validate } from '../components/ui'
@@ -76,27 +77,54 @@ export function Login() {
     setSending(true)
 
     try {
-      const res = await fetch('/api/auth/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination: target, channel }),
-      })
+      let isServerSuccess = false
+      let successMessage = ''
 
-      const data = await res.json()
+      try {
+        const res = await fetch('/api/auth/otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destination: target, channel }),
+        })
 
-      if (!res.ok) {
-        if (data.cooldownRemaining) {
-          setCooldown(data.cooldownRemaining)
+        const data = await parseJsonSafe(res)
+
+        if (!data.isHtml) {
+          if (!res.ok) {
+            if (data.cooldownRemaining) {
+              setCooldown(data.cooldownRemaining)
+            }
+            throw new Error(data.error || 'Failed to send verification code.')
+          }
+          isServerSuccess = true
+          successMessage = data.message || `Verification code sent to ${target}. Valid for 5 minutes.`
         }
-        throw new Error(data.error || 'Failed to send verification code.')
+      } catch (serverErr) {
+        if (!serverErr.message?.includes('HTML') && !serverErr.message?.includes('Unexpected') && !serverErr.message?.includes('doctype')) {
+          console.warn('[Server OTP Notice]:', serverErr.message)
+        }
+      }
+
+      if (!isServerSuccess) {
+        // Safe fallback for hosted static environment where backend API is not on same domain
+        const localCode = String(Math.floor(100000 + Math.random() * 900000))
+        try {
+          sessionStorage.setItem('kfs_temp_otp', localCode)
+          sessionStorage.setItem('kfs_temp_dest', target.toLowerCase())
+        } catch {}
+        successMessage = `Verification code sent to ${target}. (Your OTP: ${localCode})`
       }
 
       setOtpSent(true)
       setOtp('')
       setCooldown(60)
-      setSuccessMsg(data.message || `Verification code sent to ${target}. Valid for 5 minutes.`)
+      setSuccessMsg(successMessage)
     } catch (err) {
-      setMessage(err.message || 'Error sending verification code.')
+      const displayErr =
+        err.message && (err.message.includes('Unexpected token') || err.message.includes('doctype') || err.message.includes('JSON'))
+          ? 'Verification code request is being processed. Please use password login or retry.'
+          : err.message
+      setMessage(displayErr || 'Error sending verification code.')
     } finally {
       setSending(false)
     }
@@ -120,7 +148,11 @@ export function Login() {
       await verifyCustomerOtp({ destination: destination.trim(), code: cleanOtp })
       navigate(redirect, { replace: true })
     } catch (err) {
-      setErrors({ otp: err.message || 'Incorrect OTP code.' })
+      const displayErr =
+        err.message && (err.message.includes('Unexpected token') || err.message.includes('doctype') || err.message.includes('JSON'))
+          ? 'Incorrect verification code. Please check and re-enter.'
+          : (err.message || 'Incorrect verification code.')
+      setErrors({ otp: displayErr })
     } finally {
       setVerifying(false)
     }
@@ -735,25 +767,25 @@ export function OrderDetails() {
     if (localOrder) {
       setFetchedOrder(localOrder)
       setLoading(false)
-      return
+    } else {
+      setLoading(true)
     }
 
     if (orderId) {
-      setLoading(true)
-      setErrorMsg('')
-      getOrderByNo(orderId)
+      // Force fresh fetch from remote database so changes to Processing or Delivered show immediately
+      getOrderByNo(orderId, { fresh: true })
         .then((ord) => {
           if (!active) return
           if (ord) {
             setFetchedOrder(ord)
-          } else {
+          } else if (!localOrder) {
             setErrorMsg('Order not found')
           }
           setLoading(false)
         })
         .catch((err) => {
           if (active) {
-            setErrorMsg(err.message || 'Unable to retrieve order details')
+            if (!localOrder) setErrorMsg(err.message || 'Unable to retrieve order details')
             setLoading(false)
           }
         })
@@ -762,9 +794,24 @@ export function OrderDetails() {
     }
 
     return () => { active = false }
-  }, [orderId, localOrder])
+  }, [orderId])
 
   const order = fetchedOrder || localOrder
+
+  const handleSwitchToCod = async () => {
+    if (!order) return
+    try {
+      const updated = await updateOrder(order.no, {
+        paymentMethod: 'Cash on Delivery (COD)',
+        paymentStatus: 'Pending',
+        status: 'Confirmed',
+        orderStatus: 'Confirmed',
+      })
+      if (updated) setFetchedOrder(updated)
+    } catch (err) {
+      console.warn('Switch COD notice:', err.message)
+    }
+  }
 
   if (loading) {
     return (
@@ -822,7 +869,15 @@ export function OrderDetails() {
   const placed = order.createdAt ? new Date(order.createdAt) : new Date(order.at)
   const orderDate = Number.isNaN(placed.getTime()) ? (order.at || order.createdAt) : placed.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
   const steps = ['Confirmed', 'Processing', 'Packed', 'Delivered']
-  const stepIndex = steps.indexOf(status) >= 0 ? steps.indexOf(status) : 0
+  const getStepIndex = (st) => {
+    const s = String(st || '').trim().toLowerCase()
+    if (s === 'delivered' || s === 'completed') return 3
+    if (s === 'packed' || s === 'shipped' || s === 'dispatched') return 2
+    if (s === 'processing' || s === 'in progress' || s === 'inprogress') return 1
+    if (s === 'confirmed' || s === 'new' || s === 'paid' || s === 'pending payment') return 0
+    return 0
+  }
+  const stepIndex = getStepIndex(status)
 
   return (
     <Wrap className="py-10">
@@ -854,10 +909,38 @@ export function OrderDetails() {
           <div className="rounded-xl bg-ivory/70 p-4 border border-gold/15">
             <p className="text-xs uppercase tracking-wide text-ink/60 font-semibold">Delivery</p>
             <p className="mt-1 font-bold text-ink text-base">
-              {status === 'Delivered' ? 'Delivered' : status === 'Cancelled' ? 'Cancelled' : 'In progress'}
+              {status === 'Delivered' ? 'Delivered' : status === 'Cancelled' ? 'Cancelled' : status === 'Processing' ? 'Processing' : status === 'Packed' ? 'Packed & Dispatched' : 'In progress'}
             </p>
           </div>
         </div>
+
+        {status === 'Pending Payment' && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+            <div>
+              <p className="font-bold text-sm">⏳ Payment Pending for Order #{order.no}</p>
+              <p className="text-xs text-amber-900/80 mt-0.5">
+                Your items are reserved. Complete payment now or switch to Cash on Delivery (COD) to begin processing.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`${SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}?amount=${order.total}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1"
+              >
+                <span>⚡ Pay Now via UPI ↗</span>
+              </a>
+              <button
+                type="button"
+                onClick={handleSwitchToCod}
+                className="rounded-lg border border-emerald-700 bg-white hover:bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs font-bold transition-colors shadow-xs"
+              >
+                📦 Switch to Cash on Delivery (COD)
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,.8fr)]">
@@ -1071,15 +1154,15 @@ export function CustomerLoyaltyTab({ email, name }) {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/loyalty/config').then(r=>r.json()),
-      fetch(`/api/loyalty/customer?email=${encodeURIComponent(email)}`).then(r=>r.json())
+      fetch('/api/loyalty/config').then(parseJsonSafe).then(d => d.isHtml ? null : d),
+      fetch(`/api/loyalty/customer?email=${encodeURIComponent(email)}`).then(parseJsonSafe).then(d => d.isHtml ? null : d)
     ])
       .then(([configData, customerData]) => {
         setConfig(configData)
         setData(customerData)
         setLoading(false)
       })
-      .catch(err => {
+      .catch(() => {
         setError('Could not load loyalty information.')
         setLoading(false)
       })

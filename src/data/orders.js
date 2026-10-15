@@ -46,7 +46,25 @@ function saveCache(newList) {
   }
 }
 
-function normalizeOrder(order) {
+export function canonicalStatus(rawStatus, { isOnlinePayment = false, isPaid = false } = {}) {
+  const s = String(rawStatus || '').trim().toLowerCase()
+  if (s === 'delivered' || s === 'completed') return 'Delivered'
+  if (s === 'packed' || s === 'shipped' || s === 'dispatched') return 'Packed'
+  if (s === 'processing' || s === 'in progress' || s === 'inprogress') return 'Processing'
+  if (s === 'cancelled' || s === 'canceled') return 'Cancelled'
+  if (s === 'refunded') return 'Refunded'
+  if (s === 'pending payment' || s === 'payment pending') return 'Pending Payment'
+  if (s === 'confirmed' || s === 'new' || s === 'placed') return 'Confirmed'
+  if (s === 'pending') {
+    return (isOnlinePayment && !isPaid) ? 'Pending Payment' : 'Confirmed'
+  }
+  if (!s) {
+    return (isOnlinePayment && !isPaid) ? 'Pending Payment' : 'Confirmed'
+  }
+  return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1)
+}
+
+export function normalizeOrder(order) {
   if (!order || typeof order !== 'object') return null
   const now = new Date()
   const createdAt = order.createdAt || order.created_at || now.toISOString()
@@ -94,7 +112,8 @@ function normalizeOrder(order) {
   const isOnlinePayment = paymentMethod.toLowerCase().includes('razorpay') || paymentMethod.toLowerCase().includes('online') || paymentMethod.toLowerCase().includes('card') || paymentMethod.toLowerCase().includes('upi')
   const paymentStatus = order.paymentStatus || order.payment_status || 'Pending'
   const isPaid = paymentStatus.toLowerCase() === 'paid'
-  const status = order.orderStatus || order.order_status || order.status || (isOnlinePayment && !isPaid ? 'Pending Payment' : 'Confirmed')
+  const explicitStatus = order.status || order.orderStatus || order.order_status
+  const status = canonicalStatus(explicitStatus, { isOnlinePayment, isPaid })
 
   return {
     ...order,
@@ -209,17 +228,21 @@ export async function addOrder(orderData) {
 
 export async function updateOrder(no, patch) {
   let updated = null
-  const existingOrder = list.find(o => o.no === no)
-  const patchedStatus = patch.status || patch.orderStatus
+  const rawStatus = patch.status || patch.orderStatus
+  const patchedStatus = rawStatus ? canonicalStatus(rawStatus) : undefined
   const patchedPayment = patch.paymentStatus
+
+  const normalizedPatch = {
+    ...patch,
+    ...(patchedStatus ? { status: patchedStatus, orderStatus: patchedStatus } : {}),
+    ...(patchedPayment ? { paymentStatus: patchedPayment } : {})
+  }
 
   // 1. Update in Cloud Firestore
   if (isFirebaseConfigured() && db) {
     try {
       const orderRef = doc(db, 'orders', no)
-      const fbPatch = { ...patch, serverUpdatedAt: serverTimestamp() }
-      if (patchedStatus) fbPatch.status = patchedStatus
-      if (patchedPayment) fbPatch.paymentStatus = patchedPayment
+      const fbPatch = { ...normalizedPatch, serverUpdatedAt: serverTimestamp() }
       await setDoc(orderRef, fbPatch, { merge: true })
     } catch (fbErr) {
       console.warn('[Firestore updateOrder notice]:', fbErr.message)
@@ -230,8 +253,13 @@ export async function updateOrder(no, patch) {
   if (isSupabaseConfigured && supabase) {
     try {
       const sbPatch = {}
-      if (patchedStatus) sbPatch.order_status = patchedStatus
-      if (patchedPayment) sbPatch.payment_status = patchedPayment
+      if (patchedStatus) {
+        sbPatch.order_status = patchedStatus
+        sbPatch.status = patchedStatus
+      }
+      if (patchedPayment) {
+        sbPatch.payment_status = patchedPayment
+      }
       await supabase.from('orders').update(sbPatch).eq('no', no)
     } catch (sbErr) {
       console.warn('[Supabase updateOrder notice]:', sbErr.message)
@@ -243,7 +271,7 @@ export async function updateOrder(no, patch) {
     const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(no)}`, {
       method: 'PUT',
       headers: getAdminAuthHeaders(),
-      body: JSON.stringify(patch)
+      body: JSON.stringify(normalizedPatch)
     })
     if (res.ok) {
       const data = await res.json().catch(() => null)
@@ -255,7 +283,7 @@ export async function updateOrder(no, patch) {
 
   list = list.map(o => {
     if (o.no === no) {
-      return updated || normalizeOrder({ ...o, ...patch })
+      return updated || normalizeOrder({ ...o, ...normalizedPatch })
     }
     return o
   })
@@ -298,13 +326,13 @@ export async function deleteOrder(no) {
   emit()
 }
 
-export async function getOrderByNo(no) {
+export async function getOrderByNo(no, { fresh = false } = {}) {
   if (!no) return null
   const trimmed = String(no).trim()
   
   // 1. Check local in-memory cache
   const found = list.find(o => (o.no || '').toLowerCase() === trimmed.toLowerCase())
-  if (found) return found
+  if (found && !fresh) return found
 
   // 2. Check Cloud Firestore
   if (isFirebaseConfigured() && db) {
@@ -481,7 +509,18 @@ export async function loadOrders(force = false) {
       if (o && o.no) map.set(o.no, o)
     })
     list.forEach(o => {
-      if (o && o.no && !map.has(o.no)) map.set(o.no, o)
+      if (o && o.no) {
+        if (!map.has(o.no)) {
+          map.set(o.no, o)
+        } else {
+          const remote = map.get(o.no)
+          const localStatus = o.status || o.orderStatus
+          const remoteStatus = remote.status || remote.orderStatus
+          if (['Delivered', 'Packed', 'Processing'].includes(localStatus) && ['Pending Payment', 'Confirmed', 'New'].includes(remoteStatus)) {
+            map.set(o.no, { ...remote, ...o, status: localStatus, orderStatus: localStatus })
+          }
+        }
+      }
     })
 
     list = Array.from(map.values()).sort((a, b) => {

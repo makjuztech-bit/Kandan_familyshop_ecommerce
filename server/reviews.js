@@ -51,7 +51,7 @@ const publicFields=`id, product_id AS productId, name, rating, title, descriptio
  created_at AS createdAt, verified, featured, helpful_count AS helpfulCount,
  admin_response AS adminResponse, photo IS NOT NULL AS hasPhoto`
 const adminFields=`${publicFields}, email, status, report_count AS reportCount, photo_type AS photoType`
-const reviewLimiter=rateLimit({windowMs:60*60*1000,limit:3,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many review submissions. Please try again later.'}})
+const reviewLimiter=rateLimit({windowMs:60*60*1000,limit:50,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many review submissions. Please try again later.'}})
 const actionLimiter=rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many review actions. Please try again later.'}})
 
 function safeTokenMatch(provided,expected){

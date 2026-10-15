@@ -9,7 +9,10 @@ const monthYear=value=>new Date(value).toLocaleDateString(undefined,{month:'long
 const avatarName=name=>name.trim().split(/\s+/).slice(0,2).map(part=>part[0]?.toUpperCase()||'').join('')
 
 function RatingBreakdown({summary}){
- return <div className="mt-5 space-y-2">{summary.breakdown.map(row=><div key={row.rating} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
+ const rows = (summary && Array.isArray(summary.breakdown) && summary.breakdown.length > 0)
+  ? summary.breakdown
+  : [5,4,3,2,1].map(r => ({ rating: r, percent: 0, count: 0 }))
+ return <div className="mt-5 space-y-2">{rows.map(row=><div key={row.rating} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
   <span className="w-12 whitespace-nowrap">{row.rating} ★</span><div className="h-2 overflow-hidden rounded-full bg-ivory-dark" role="meter" aria-label={`${row.rating} star ratings`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={row.percent}><div className="h-full rounded-full bg-gold transition-all duration-500" style={{width:`${row.percent}%`}}/></div><span className="w-10 text-right text-ink/70">{row.percent}%</span>
  </div>)}</div>
 }
@@ -48,7 +51,7 @@ function ReviewForm({productId,initialName='',initialEmail='',onClose,onSubmitte
   setSending(true)
   try{
    const result=await submitReview({name,email,productId:selectedProduct,rating,title,description,photo,website})
-   onSubmitted(result.message)
+   onSubmitted(result?.message || 'Thank you! Your review has been submitted for moderation.')
   }catch(problem){setError(problem instanceof Error?problem.message:'Could not submit your review. Please try again.')}
   finally{setSending(false)}
  }

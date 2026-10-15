@@ -8,6 +8,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db, isFirebaseConfigured } from '../services/firebase'
 import { ADMIN_PASSWORD, SHOP, API_BASE } from '../config/shop'
+import { parseJsonSafe } from '../lib/api'
 
 const AdminAuthContext = createContext(null)
 
@@ -167,22 +168,20 @@ export function AdminAuthProvider({ children }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
       })
-      if (serverRes.ok) {
-        const serverData = await serverRes.json()
-        if (serverData.ok && serverData.token) {
-          sessionStorage.setItem('kfs_admin_token', serverData.token)
-          sessionStorage.setItem('kfs_admin', '1')
-          sessionStorage.setItem('kfs_admin_email', cleanEmail)
-          const userObj = serverData.user || {
-            email: cleanEmail,
-            displayName: 'Store Administrator',
-            role: 'admin',
-          }
-          setAdminUser(userObj)
-          setIsAdmin(true)
-          setLoading(false)
-          return { ok: true, user: userObj }
+      const serverData = await parseJsonSafe(serverRes)
+      if (!serverData.isHtml && serverRes.ok && serverData.ok && serverData.token) {
+        sessionStorage.setItem('kfs_admin_token', serverData.token)
+        sessionStorage.setItem('kfs_admin', '1')
+        sessionStorage.setItem('kfs_admin_email', cleanEmail)
+        const userObj = serverData.user || {
+          email: cleanEmail,
+          displayName: 'Store Administrator',
+          role: 'admin',
         }
+        setAdminUser(userObj)
+        setIsAdmin(true)
+        setLoading(false)
+        return { ok: true, user: userObj }
       }
     } catch {}
 

@@ -350,8 +350,70 @@ function setupFirestoreProductsListener() {
   } catch {}
 }
 
+// IndexedDB persistent storage for products & full-resolution images
+const IDB_PRODUCT_KEY = 'kfs_catalog_data'
+
+function getProductsDB() {
+  if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open('kfs_products_db', 1)
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result
+        if (!db.objectStoreNames.contains('products')) {
+          db.createObjectStore('products')
+        }
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+export async function idbGetProducts() {
+  const db = await getProductsDB()
+  if (!db) return null
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('products', 'readonly')
+      const store = tx.objectStore('products')
+      const req = store.get(IDB_PRODUCT_KEY)
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+export async function idbSaveProducts(prods) {
+  const db = await getProductsDB()
+  if (!db) return false
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('products', 'readwrite')
+      const store = tx.objectStore('products')
+      store.put(prods, IDB_PRODUCT_KEY)
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => resolve(false)
+    } catch {
+      resolve(false)
+    }
+  })
+}
+
 if (typeof window !== 'undefined') {
   setTimeout(() => {
+    // Restore products and images from IndexedDB if available
+    idbGetProducts().then((idbProds) => {
+      if (Array.isArray(idbProds) && idbProds.length > 0) {
+        load(idbProds)
+        emit()
+      }
+    }).catch(() => {})
+
     syncCatalogWithServer()
     setupFirestoreProductsListener()
   }, 10)
@@ -376,7 +438,19 @@ const saveLocal = (k, v) => {
   try {
     localStorage.setItem(k, JSON.stringify(v))
     return true
-  } catch {
+  } catch (err) {
+    // If quota exceeded due to large uploaded photos, save lightweight version to localStorage
+    try {
+      const lightweight = Array.isArray(v)
+        ? v.map((prod) => ({
+            ...prod,
+            images: Array.isArray(prod.images)
+              ? prod.images.map((im) => (typeof im === 'string' && im.length > 500 ? im.slice(0, 100) + '...' : im))
+              : [],
+          }))
+        : v
+      localStorage.setItem(k, JSON.stringify(lightweight))
+    } catch {}
     return false
   }
 }
@@ -478,6 +552,7 @@ export async function saveProduct(p) {
   products.splice(0, products.length, ...next)
   byId[sanitized.id] = sanitized
   saveLocal(KEY, next)
+  idbSaveProducts(next).catch(() => {})
   emit()
 
   return sanitized
@@ -522,6 +597,7 @@ export async function deleteProduct(id) {
   products.splice(0, products.length, ...next)
   delete byId[id]
   saveLocal(KEY, next)
+  idbSaveProducts(next).catch(() => {})
   emit()
   return true
 }

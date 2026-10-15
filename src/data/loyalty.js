@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { parseJsonSafe } from '../lib/api'
 
 const CONFIG_KEY = 'kfs_loyalty_config'
 const DEFAULT_CONFIG = {
@@ -36,12 +37,10 @@ function broadcastConfig(newConfig) {
 export async function fetchLoyaltyConfig() {
   try {
     const res = await fetch('/api/loyalty/config')
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && data.config) {
-        broadcastConfig(data.config)
-        return data.config
-      }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && data.config) {
+      broadcastConfig(data.config)
+      return data.config
     }
   } catch {}
   return activeConfig
@@ -58,8 +57,8 @@ export async function updateLoyaltyConfigApi(patch) {
       headers,
       body: JSON.stringify(patch),
     })
-    const data = await res.json()
-    if (data.ok && data.config) {
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && data.ok && data.config) {
       broadcastConfig(data.config)
       return { ok: true, config: data.config }
     }
@@ -136,12 +135,10 @@ export async function fetchCustomerLoyaltyApi(email) {
 
   try {
     const res = await fetch(`/api/loyalty/customer?email=${encodeURIComponent(normalized)}`)
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && data.customer) {
-        notifyCustomerSubs(normalized, data.customer)
-        return data.customer
-      }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && data.customer) {
+      notifyCustomerSubs(normalized, data.customer)
+      return data.customer
     }
   } catch {}
 
@@ -157,10 +154,8 @@ export async function fetchCustomerLoyaltyPointsApi(email) {
   const normalized = email.trim().toLowerCase()
   try {
     const res = await fetch(`/api/customer/loyalty-points?email=${encodeURIComponent(normalized)}`)
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok) return data
-    }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok) return data
   } catch {}
   return null
 }
@@ -170,10 +165,8 @@ export async function fetchCustomerLoyaltyHistoryApi(email) {
   const normalized = email.trim().toLowerCase()
   try {
     const res = await fetch(`/api/customer/loyalty-history?email=${encodeURIComponent(normalized)}`)
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && Array.isArray(data.history)) return data.history
-    }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && Array.isArray(data.history)) return data.history
   } catch {}
   return []
 }
@@ -211,11 +204,9 @@ export async function fetchAllLoyaltyCustomersApi() {
 
   try {
     const res = await fetch('/api/loyalty/customers', { headers })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && Array.isArray(data.customers)) {
-        return data.customers
-      }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && Array.isArray(data.customers)) {
+      return data.customers
     }
   } catch {}
   return []
@@ -228,11 +219,9 @@ export async function fetchLoyaltyStatsApi() {
 
   try {
     const res = await fetch('/api/loyalty/stats', { headers })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && data.stats) {
-        return data.stats
-      }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && data.stats) {
+      return data.stats
     }
   } catch {}
   return {
@@ -250,11 +239,9 @@ export async function fetchLoyaltyTransactionsApi(limit = 100) {
 
   try {
     const res = await fetch(`/api/loyalty/transactions?limit=${limit}`, { headers })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.ok && Array.isArray(data.transactions)) {
-        return data.transactions
-      }
+    const data = await parseJsonSafe(res)
+    if (!data.isHtml && res.ok && data.ok && Array.isArray(data.transactions)) {
+      return data.transactions
     }
   } catch {}
   return []
@@ -270,8 +257,8 @@ export async function adjustCustomerPointsApi({ email, name, phone, points, reas
     headers,
     body: JSON.stringify({ email, name, phone, points, reason }),
   })
-  const data = await res.json()
-  if (data.ok && data.customer) {
+  const data = await parseJsonSafe(res)
+  if (!data.isHtml && data.ok && data.customer) {
     notifyCustomerSubs(email, data.customer)
     return { ok: true, customer: data.customer }
   }

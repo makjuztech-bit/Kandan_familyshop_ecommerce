@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { useOrders, getOrderByNo, fetchCustomerOrders } from '../data/orders'
+import { useOrders, getOrderByNo, fetchCustomerOrders, updateOrder } from '../data/orders'
 import { useAuthStatus } from '../data/auth'
 import { inr } from '../data/products'
 import { Wrap, btnP, btnO } from '../components/ui'
@@ -10,12 +10,13 @@ const BADGE = {
   New: 'bg-amber-100 text-amber-800',
   Confirmed: 'bg-emerald-100 text-emerald-800',
   Pending: 'bg-amber-100 text-amber-800',
-  Processing: 'bg-blue-100 text-blue-800',
-  Packed: 'bg-blue-100 text-blue-800',
-  Shipped: 'bg-indigo-100 text-indigo-800',
-  Delivered: 'bg-emerald-100 text-emerald-800',
-  Cancelled: 'bg-red-100 text-red-700',
-  Refunded: 'bg-red-100 text-red-700',
+  'Pending Payment': 'bg-amber-100 text-amber-900 border border-amber-300',
+  Processing: 'bg-blue-100 text-blue-800 border border-blue-200',
+  Packed: 'bg-blue-100 text-blue-800 border border-blue-200',
+  Shipped: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+  Delivered: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+  Cancelled: 'bg-red-100 text-red-700 border border-red-200',
+  Refunded: 'bg-red-100 text-red-700 border border-red-200',
 }
 
 const DELIVERY_STEPS = [
@@ -26,11 +27,11 @@ const DELIVERY_STEPS = [
 ]
 
 function getDeliveryStepIndex(status) {
-  const s = (status || '').toLowerCase()
+  const s = (status || '').toLowerCase().trim()
   if (s === 'delivered' || s === 'completed') return 3
-  if (s === 'packed' || s === 'shipped') return 2
-  if (s === 'processing') return 1
-  if (s === 'confirmed' || s === 'new' || s === 'pending') return 0
+  if (s === 'packed' || s === 'shipped' || s === 'dispatched') return 2
+  if (s === 'processing' || s === 'in progress' || s === 'inprogress') return 1
+  if (s === 'confirmed' || s === 'new' || s === 'pending' || s === 'pending payment') return 0
   return 0
 }
 
@@ -94,7 +95,7 @@ export function CustomerOrders() {
       let remoteMatches = []
       try {
         if (/^KFS-/i.test(q)) {
-          const single = await getOrderByNo(q)
+          const single = await getOrderByNo(q, { fresh: true })
           if (single) remoteMatches.push(single)
         } else {
           remoteMatches = await fetchCustomerOrders({
@@ -137,21 +138,23 @@ export function CustomerOrders() {
     performLookup(searchInput)
   }
 
-  // Orders belonging to logged-in user
+  // Orders belonging to logged-in user or device
   const userEmail = (session?.email || '').trim().toLowerCase()
   const userPhone = (session?.phone || '').replace(/\D/g, '')
   const myAccountOrders = session?.loggedIn
     ? orders.filter((o) => {
         const oEmail = (o.email || '').trim().toLowerCase()
         const oPhone = (o.phone || '').replace(/\D/g, '')
-        if (userEmail && oEmail && oEmail === userEmail) return true
-        if (userPhone && oPhone && (oPhone.endsWith(userPhone) || userPhone.endsWith(oPhone))) return true
+        if (userEmail && oEmail && (oEmail === userEmail || oEmail.includes(userEmail) || userEmail.includes(oEmail))) return true
+        if (userPhone && oPhone && (oPhone.slice(-10) === userPhone.slice(-10))) return true
         return false
       })
-    : []
+    : orders
 
-  // Final display list
-  const displayOrders = hasSearched ? searchedOrders : myAccountOrders
+  // Final display list: if logged in but no account matches yet, fallback to recent device orders
+  const displayOrders = hasSearched
+    ? searchedOrders
+    : (myAccountOrders.length > 0 ? myAccountOrders : orders)
 
   return (
     <Wrap className="py-10">
@@ -326,16 +329,32 @@ export function CustomerOrders() {
                         <p className="font-serif text-3xl font-bold text-primary">{inr(order.total || 0)}</p>
 
                         <div className="mt-4 flex flex-wrap gap-2">
-                          {!isPaid && isRazorpay && (
-                            <a
-                              href={SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 text-xs font-bold transition-colors shadow-sm"
-                            >
-                              <span>💳 Pay via Razorpay</span>
-                              <span>↗</span>
-                            </a>
+                          {!isPaid && (
+                            <>
+                              <a
+                                href={`${SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}?amount=${order.total}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 text-xs font-bold transition-colors shadow-sm"
+                              >
+                                <span>⚡ Pay via UPI</span>
+                                <span>↗</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await updateOrder(order.no, {
+                                    paymentMethod: 'Cash on Delivery (COD)',
+                                    paymentStatus: 'Pending',
+                                    status: 'Confirmed',
+                                    orderStatus: 'Confirmed',
+                                  })
+                                }}
+                                className="inline-flex items-center gap-1 rounded-xl border border-emerald-700 bg-white hover:bg-emerald-50 text-emerald-800 px-3 py-2 text-xs font-bold shadow-xs transition-colors"
+                              >
+                                <span>📦 Switch to COD</span>
+                              </button>
+                            </>
                           )}
                           <Link to={`/order/${order.no}`} className={btnP + ' rounded-xl px-4 py-2 text-xs'}>
                             View Details
@@ -409,37 +428,51 @@ export function CustomerDelivery() {
     if (preFilter) setFilter(preFilter)
   }, [preFilter])
 
-  // Try fetching single order if not in local store
+  // Always query fresh data from remote databases when tracking an order number
   useEffect(() => {
-    if (filter.trim() && !orders.some(o => o.no.toLowerCase() === filter.trim().toLowerCase())) {
+    if (filter.trim()) {
       let active = true
       setSearching(true)
-      getOrderByNo(filter.trim()).then(res => {
-        if (active && res) setSearchedOrder(res)
-        if (active) setSearching(false)
-      }).catch(() => {
-        if (active) setSearching(false)
-      })
+      getOrderByNo(filter.trim(), { fresh: true })
+        .then(res => {
+          if (active && res) setSearchedOrder(res)
+          if (active) setSearching(false)
+        })
+        .catch(() => {
+          if (active) setSearching(false)
+        })
       return () => { active = false }
     } else {
       setSearchedOrder(null)
     }
-  }, [filter, orders])
+  }, [filter])
 
   const myOrders = session?.loggedIn
-    ? orders.filter(o => (o.email || '').trim().toLowerCase() === (session?.email || '').trim().toLowerCase())
-    : []
+    ? orders.filter(o => {
+        const oEmail = (o.email || '').trim().toLowerCase()
+        const uEmail = (session?.email || '').trim().toLowerCase()
+        const oPhone = (o.phone || '').replace(/\D/g, '')
+        const uPhone = (session?.phone || '').replace(/\D/g, '')
+        if (uEmail && oEmail && (oEmail === uEmail || oEmail.includes(uEmail) || uEmail.includes(oEmail))) return true
+        if (uPhone && oPhone && (oPhone.slice(-10) === uPhone.slice(-10))) return true
+        return false
+      })
+    : orders
 
   // Combine matching orders from account or searched order
   let displayOrders = []
   if (filter.trim()) {
     const q = filter.trim().toLowerCase()
-    displayOrders = orders.filter(o => o.no.toLowerCase().includes(q) || (o.phone && o.phone.includes(q)))
+    const cleanDigits = q.replace(/\D/g, '')
+    displayOrders = orders.filter(o =>
+      o.no.toLowerCase().includes(q) ||
+      (cleanDigits && (o.phone || '').replace(/\D/g, '').includes(cleanDigits))
+    )
     if (displayOrders.length === 0 && searchedOrder) {
       displayOrders = [searchedOrder]
     }
-  } else if (session?.loggedIn) {
-    displayOrders = myOrders
+  } else {
+    displayOrders = myOrders.length > 0 ? myOrders : orders
   }
 
   const handleSearchSubmit = (e) => {
@@ -585,7 +618,7 @@ export function CustomerDelivery() {
                       <div className={`mt-5 rounded-xl p-3 text-sm text-center font-semibold ${
                         status === 'Delivered'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : status === 'Packed'
+                          : (status === 'Packed' || status === 'Processing')
                           ? 'bg-blue-50 text-blue-700 border border-blue-200'
                           : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}>
@@ -595,6 +628,8 @@ export function CustomerDelivery() {
                           ? '📦 Your order has been carefully packaged and handed over for courier dispatch.'
                           : status === 'Processing'
                           ? '⚙️ Your order is being inspected and hand-packed at our Kanchipuram showroom.'
+                          : status === 'Pending Payment'
+                          ? '⏳ Payment is pending for this order. Please complete payment or select Cash on Delivery to begin processing.'
                           : '📋 Your order has been received and confirmed by Sri Kandan Family Shop.'}
                       </div>
                     </div>

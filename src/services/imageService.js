@@ -269,20 +269,32 @@ export async function uploadImageToFirebase({
   // 8. Local cache fallback update
   try {
     const current = getFallbackLocalGallery()
-    current.unshift({
-      id: docId,
-      title: title || (file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Uploaded Image'),
-      category,
-      description,
-      url: finalUrl,
-      storagePath,
-      fileName: file.name || 'image.jpg',
-      fileSize: optimized.size,
-      contentType: 'image/jpeg',
-      targetKey: targetKey || null,
-      createdAt: new Date(),
-    })
-    localStorage.setItem('kfs_local_gallery', JSON.stringify(current.slice(0, 30)))
+    const isData = finalUrl.startsWith('data:')
+    const trimmed = [
+      {
+        id: docId,
+        title: title || (file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Uploaded Image'),
+        category,
+        description,
+        url: finalUrl,
+        storagePath,
+        fileName: file.name || 'image.jpg',
+        fileSize: optimized.size,
+        contentType: 'image/jpeg',
+        targetKey: targetKey || null,
+        createdAt: new Date(),
+      },
+      ...current.filter((c) => c.id !== docId),
+    ].slice(0, isData ? 6 : 20)
+
+    try {
+      localStorage.setItem('kfs_local_gallery', JSON.stringify(trimmed))
+    } catch {
+      const onlyHttp = trimmed.filter((c) => !c.url?.startsWith('data:')).slice(0, 10)
+      try {
+        localStorage.setItem('kfs_local_gallery', JSON.stringify(onlyHttp))
+      } catch {}
+    }
     window.dispatchEvent(new Event('kfs_local_gallery_updated'))
   } catch {}
 
@@ -607,11 +619,16 @@ function uploadFallbackLocalImage({ file, title, category, description, targetKe
           }
 
           const current = getFallbackLocalGallery()
-          current.unshift(item)
+          const trimmed = [item, ...current.filter((c) => c.id !== id)].slice(0, 6)
           try {
-            localStorage.setItem('kfs_local_gallery', JSON.stringify(current.slice(0, 30)))
-            window.dispatchEvent(new Event('kfs_local_gallery_updated'))
-          } catch {}
+            localStorage.setItem('kfs_local_gallery', JSON.stringify(trimmed))
+          } catch {
+            const onlyHttp = trimmed.filter((c) => !c.url?.startsWith('data:')).slice(0, 10)
+            try {
+              localStorage.setItem('kfs_local_gallery', JSON.stringify(onlyHttp))
+            } catch {}
+          }
+          window.dispatchEvent(new Event('kfs_local_gallery_updated'))
 
           if (targetKey) {
             setActiveWebsiteImage(targetKey, url, id)

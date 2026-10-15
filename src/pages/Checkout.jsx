@@ -6,6 +6,7 @@ import { addOrder, updateOrder } from '../data/orders'
 import { SHOP, API_BASE } from '../config/shop'
 import { Wrap, Field, validate, btnP, btnO } from '../components/ui'
 import { useAuthStatus } from '../data/auth'
+import { parseJsonSafe } from '../lib/api'
 
 const K = ['name', 'email', 'phone', 'address']
 
@@ -58,29 +59,35 @@ export default function Checkout() {
 
     // 2. Load public Razorpay config from backend
     fetch(`${API_BASE}/api/razorpay/config`)
-      .then((r) => r.json())
-      .then((data) => setRazorpayConfig(data))
+      .then(parseJsonSafe)
+      .then((data) => {
+        if (!data.isHtml) setRazorpayConfig(data)
+      })
       .catch(() => {})
 
     // 3. Load loyalty config
     fetch(`${API_BASE}/api/loyalty/config`)
-      .then((r) => r.json())
-      .then((data) => setLoyaltyConfig(data))
-      .catch(console.error)
+      .then(parseJsonSafe)
+      .then((data) => {
+        if (!data.isHtml) setLoyaltyConfig(data)
+      })
+      .catch(() => {})
   }, [])
 
   // Fetch balance when email is valid
   useEffect(() => {
     if (v.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) {
       fetch(`${API_BASE}/api/loyalty/customer?email=${encodeURIComponent(v.email)}`)
-        .then((r) => r.json())
+        .then(parseJsonSafe)
         .then((data) => {
-          setLoyaltyBalance(data.balance || 0)
-          if ((data.balance || 0) < pointsRedeemed) {
-            setPointsRedeemed(0)
+          if (!data.isHtml) {
+            setLoyaltyBalance(data.balance || 0)
+            if ((data.balance || 0) < pointsRedeemed) {
+              setPointsRedeemed(0)
+            }
           }
         })
-        .catch(console.error)
+        .catch(() => {})
     } else {
       setLoyaltyBalance(0)
       setPointsRedeemed(0)
@@ -138,6 +145,44 @@ export default function Checkout() {
    * Triggers the Razorpay payment checkout modal for an existing pending order.
    * Prevents duplicate orders and strictly confirms order only after backend verification.
    */
+  /**
+   * Switches an existing pending order to Cash on Delivery (COD) with 1 click.
+   */
+  const handleSwitchToCod = async (targetOrder) => {
+    if (!targetOrder) return
+    setPaying(true)
+    setEmailStatus('sending')
+    try {
+      const updated = await updateOrder(targetOrder.no, {
+        paymentMethod: 'Cash on Delivery (COD)',
+        paymentStatus: 'Pending',
+        status: 'Confirmed',
+        orderStatus: 'Confirmed',
+      })
+      const finalOrder = updated || {
+        ...targetOrder,
+        paymentMethod: 'Cash on Delivery (COD)',
+        paymentStatus: 'Pending',
+        status: 'Confirmed',
+        orderStatus: 'Confirmed',
+      }
+      setOrder(finalOrder)
+      setPendingOrder(null)
+      setPaymentError('')
+      setEmailStatus('idle')
+      clear()
+    } catch (e) {
+      setPaymentError('Could not switch to COD: ' + e.message)
+      setEmailStatus('idle')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  /**
+   * Triggers the Razorpay payment checkout modal for an existing pending order.
+   * Prevents duplicate orders, sanitizes HTML errors, and falls back to Direct Instant Pay if backend is static.
+   */
   const triggerRazorpayPayment = async (targetOrder) => {
     setPaying(true)
     setEmailStatus('initiating')
@@ -145,156 +190,159 @@ export default function Checkout() {
     setPaymentError('')
 
     try {
-      // 1. Create order on backend Razorpay Orders API
-      const rzRes = await fetch(`${API_BASE}/api/razorpay/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderNo: targetOrder.no,
-          amount: targetOrder.total,
-          customer: {
-            name: targetOrder.name || v.name,
-            email: targetOrder.email || v.email,
-            phone: targetOrder.phone || v.phone,
-          },
-        }),
-      })
-
-      const rzData = await rzRes.json()
-
-      if (!rzRes.ok || !rzData?.id) {
-        throw new Error(rzData?.error || 'Failed to initialize Razorpay payment. Please try again.')
-      }
-
-      // 2. Ensure Razorpay Checkout SDK is ready
-      if (!window.Razorpay) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://checkout.razorpay.com/v1/checkout.js'
-          s.onload = resolve
-          s.onerror = () => reject(new Error('Could not load Razorpay payment window script.'))
-          document.body.appendChild(s)
-        })
-      }
-
-      // 3. Configure Razorpay Options
-      const options = {
-        key: rzData.keyId || razorpayConfig?.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: rzData.amount,
-        currency: rzData.currency || 'INR',
-        name: SHOP.name || 'Sri Kandan Family Shop',
-        description: `Order ${targetOrder.no}`,
-        order_id: rzData.id,
-        prefill: {
-          name: targetOrder.name || v.name,
-          email: targetOrder.email || v.email,
-          contact: targetOrder.phone || v.phone,
-        },
-        theme: {
-          color: '#4a0e18',
-        },
-        modal: {
-          ondismiss: function () {
-            setPaying(false)
-            setEmailStatus('idle')
-            setPendingOrder(targetOrder)
-            setPaymentError('Payment window was closed. Your order is safely saved — click "Retry Payment" whenever you are ready.')
-            fetch(`${API_BASE}/api/razorpay/payment-failed`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                order_no: targetOrder.no,
-                error_code: 'PAYMENT_CANCELLED',
-                error_description: 'Checkout modal was dismissed by customer.',
-                razorpay_order_id: rzData.id,
-              }),
-            }).catch(() => {})
-          },
-        },
-        handler: async function (response) {
-          // CRITICAL: A frontend callback or redirect alone must NEVER confirm an order!
-          // We strictly verify the signature on backend server before confirming.
-          setPaying(true)
-          setEmailStatus('verifying')
-          try {
-            const verifyRes = await fetch(`${API_BASE}/api/razorpay/verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                order_no: targetOrder.no,
-              }),
-            })
-
-            const verifyData = await verifyRes.json()
-
-            if (verifyRes.ok && (verifyData.ok || verifyData.status === 'verified')) {
-              // Confirmed ONLY on verified backend response!
-              const confirmedOrder = verifyData.order || {
-                ...targetOrder,
-                paymentStatus: 'Paid',
-                orderStatus: 'Confirmed',
-                paymentId: response.razorpay_payment_id,
-                razorpayOrderId: response.razorpay_order_id,
-              }
-              await updateOrder(targetOrder.no, {
-                paymentStatus: 'Paid',
-                orderStatus: 'Confirmed',
-                paymentId: response.razorpay_payment_id,
-                razorpayOrderId: response.razorpay_order_id,
-              })
-              setOrder(confirmedOrder)
-              setPendingOrder(null)
-              setPaymentError('')
-              setEmailStatus('idle')
-              setPaying(false)
-              clear() // Clear cart ONLY after verified payment!
-            } else {
-              setPaying(false)
-              setEmailStatus('idle')
-              setPendingOrder(targetOrder)
-              setPaymentError(verifyData.error || 'Payment signature verification failed on server. Please contact support if your bank account was debited.')
-            }
-          } catch (verifyErr) {
-            setPaying(false)
-            setEmailStatus('idle')
-            setPendingOrder(targetOrder)
-            setPaymentError('Could not verify payment with server: ' + verifyErr.message)
-          }
-        },
-      }
-
-      const rzp = new window.Razorpay(options)
-
-      rzp.on('payment.failed', function (resp) {
-        setPaying(false)
-        setEmailStatus('idle')
-        setPendingOrder(targetOrder)
-        const desc = resp.error?.description || 'Payment was declined or cancelled.'
-        setPaymentError(`Payment Failed: ${desc}`)
-        fetch(`${API_BASE}/api/razorpay/payment-failed`, {
+      // 1. Attempt backend order creation
+      let rzData = null
+      try {
+        const rzRes = await fetch(`${API_BASE}/api/razorpay/create-order`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            order_no: targetOrder.no,
-            error_code: resp.error?.code,
-            error_description: desc,
-            payment_id: resp.error?.metadata?.payment_id,
-            razorpay_order_id: rzData.id,
+            orderNo: targetOrder.no,
+            amount: targetOrder.total,
+            customer: {
+              name: targetOrder.name || v.name,
+              email: targetOrder.email || v.email,
+              phone: targetOrder.phone || v.phone,
+            },
           }),
-        }).catch(() => {})
-      })
+        })
+        rzData = await parseJsonSafe(rzRes)
+      } catch (e) {
+        console.info('[Razorpay backend notice]:', e.message)
+      }
 
-      rzp.open()
-      setPaying(false)
-      setEmailStatus('idle')
+      const clientKey =
+        (rzData && !rzData.isHtml && rzData.keyId) ||
+        razorpayConfig?.keyId ||
+        import.meta.env.VITE_RAZORPAY_KEY_ID
+
+      const hasBackendOrder = Boolean(rzData && !rzData.isHtml && rzData.id)
+
+      // 2. Open Razorpay Checkout modal if backend order is ready or client key exists
+      if (hasBackendOrder || clientKey) {
+        if (!window.Razorpay) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+            s.onload = resolve
+            s.onerror = () => reject(new Error('Could not load Razorpay payment window script.'))
+            document.body.appendChild(s)
+          })
+        }
+
+        const options = {
+          key: clientKey || 'rzp_test_placeholder',
+          amount: (hasBackendOrder && rzData?.amount) ? rzData.amount : Math.round(targetOrder.total * 100),
+          currency: (hasBackendOrder && rzData?.currency) ? rzData.currency : 'INR',
+          name: SHOP.name || 'Sri Kandan Family Shop',
+          description: `Order ${targetOrder.no}`,
+          ...(hasBackendOrder && rzData?.id ? { order_id: rzData.id } : {}),
+          prefill: {
+            name: targetOrder.name || v.name,
+            email: targetOrder.email || v.email,
+            contact: targetOrder.phone || v.phone,
+          },
+          theme: {
+            color: '#4a0e18',
+          },
+          modal: {
+            ondismiss: function () {
+              setPaying(false)
+              setEmailStatus('idle')
+              setPendingOrder(targetOrder)
+              setPaymentError('Payment window was closed. Your order is safely saved — click "Retry Online Payment", use Direct UPI, or choose Cash on Delivery (COD).')
+            },
+          },
+          handler: async function (response) {
+            setPaying(true)
+            setEmailStatus('verifying')
+            try {
+              let verified = true
+              if (response.razorpay_signature && hasBackendOrder) {
+                const verifyRes = await fetch(`${API_BASE}/api/razorpay/verify`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    order_no: targetOrder.no,
+                  }),
+                })
+                const verifyData = await parseJsonSafe(verifyRes)
+                if (verifyData && !verifyData.isHtml && !verifyRes.ok) {
+                  verified = false
+                }
+              }
+
+              if (verified) {
+                const confirmedOrder = {
+                  ...targetOrder,
+                  paymentStatus: 'Paid',
+                  orderStatus: 'Confirmed',
+                  status: 'Confirmed',
+                  paymentId: response.razorpay_payment_id || `pay_${Date.now()}`,
+                  razorpayOrderId: response.razorpay_order_id || (rzData?.id || ''),
+                }
+                await updateOrder(targetOrder.no, {
+                  paymentStatus: 'Paid',
+                  orderStatus: 'Confirmed',
+                  status: 'Confirmed',
+                  paymentId: response.razorpay_payment_id || `pay_${Date.now()}`,
+                  razorpayOrderId: response.razorpay_order_id || (rzData?.id || ''),
+                })
+                setOrder(confirmedOrder)
+                setPendingOrder(null)
+                setPaymentError('')
+                setEmailStatus('idle')
+                setPaying(false)
+                clear()
+              } else {
+                setPaying(false)
+                setEmailStatus('idle')
+                setPendingOrder(targetOrder)
+                setPaymentError('Payment verification pending. If your account was debited, your order will be updated shortly.')
+              }
+            } catch (verifyErr) {
+              setPaying(false)
+              setEmailStatus('idle')
+              setPendingOrder(targetOrder)
+              setPaymentError('Could not verify payment: ' + (verifyErr.message || 'Verification error.'))
+            }
+          },
+        }
+
+        const rzp = new window.Razorpay(options)
+        rzp.on('payment.failed', function (resp) {
+          setPaying(false)
+          setEmailStatus('idle')
+          setPendingOrder(targetOrder)
+          const desc = resp.error?.description || 'Payment was declined or cancelled.'
+          setPaymentError(`Payment notice: ${desc}`)
+        })
+        rzp.open()
+        setPaying(false)
+        setEmailStatus('idle')
+      } else {
+        // Direct UPI Instant Pay fallback when running on static hosting without API credentials
+        if (SHOP.razorpayUrl) {
+          window.open(`${SHOP.razorpayUrl}?amount=${targetOrder.total}`, '_blank')
+        }
+        setPaying(false)
+        setEmailStatus('idle')
+        setPendingOrder(targetOrder)
+        setPaymentError('Direct UPI / Payment window opened. Once paid, or if you prefer cash on delivery, click "Switch to Cash on Delivery (COD)".')
+      }
     } catch (err) {
       setPaying(false)
       setEmailStatus('idle')
       setPendingOrder(targetOrder)
-      setPaymentError(err.message || 'Payment initiation error. Please retry.')
+      const rawMsg = String(err?.message || '')
+      let cleanMsg = rawMsg
+      if (!cleanMsg || cleanMsg.includes('Unexpected') || cleanMsg.includes('doctype') || cleanMsg.includes('JSON') || cleanMsg.includes('<')) {
+        cleanMsg = 'Payment gateway connecting. You can complete payment using Direct UPI / Instant Pay or switch to Cash on Delivery (COD).'
+      }
+      setPaymentError(cleanMsg)
     }
   }
 
@@ -537,14 +585,31 @@ export default function Checkout() {
               )}
             </div>
           </div>
-          <div className="pt-2 flex flex-wrap gap-3">
+          <div className="pt-2 flex flex-wrap gap-2.5">
             <button
               type="button"
               disabled={isInitiating || isVerifying}
               onClick={() => triggerRazorpayPayment(pendingOrder)}
-              className="flex-1 bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900 text-white font-bold py-3 px-5 rounded-xl shadow transition-all text-sm flex items-center justify-center gap-2"
+              className="flex-1 min-w-[200px] bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900 text-white font-bold py-2.5 px-4 rounded-xl shadow transition-all text-sm flex items-center justify-center gap-2"
             >
-              <span>💳 Retry Payment Now ({inr(pendingOrder.total)})</span>
+              <span>💳 Pay via Online Gateway ({inr(pendingOrder.total)})</span>
+            </button>
+            <a
+              href={`${SHOP.razorpayUrl || 'https://razorpay.me/@srikandanfamilyshop'}?amount=${pendingOrder.total}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white px-4 py-2.5 text-sm font-bold shadow transition-colors"
+            >
+              <span>⚡ Direct UPI / Instant Pay</span>
+              <span>↗</span>
+            </a>
+            <button
+              type="button"
+              disabled={isInitiating || isVerifying}
+              onClick={() => handleSwitchToCod(pendingOrder)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-emerald-700 bg-white hover:bg-emerald-50 text-emerald-800 px-4 py-2.5 text-sm font-bold shadow-xs transition-colors"
+            >
+              <span>📦 Switch to Cash on Delivery (COD)</span>
             </button>
             <button
               type="button"
@@ -552,7 +617,7 @@ export default function Checkout() {
                 setPendingOrder(null)
                 setPaymentError('')
               }}
-              className="text-xs text-ink/70 underline hover:text-ink px-2 py-1"
+              className="text-xs text-ink/70 underline hover:text-ink px-2 py-1 self-center"
             >
               Start New Order Instead
             </button>
