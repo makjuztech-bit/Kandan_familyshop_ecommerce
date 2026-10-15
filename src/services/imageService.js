@@ -157,28 +157,38 @@ export async function uploadImageToFirebase({
         },
       })
 
-      await new Promise((res, rej) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 60) + 35
-            onProgress(Math.min(95, progress))
-          },
-          (err) => rej(err),
-          async () => {
-            try {
-              downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
-              res()
-            } catch (e) {
-              rej(e)
+      await Promise.race([
+        new Promise((res, rej) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 40) + 35
+              onProgress(Math.min(85, progress))
+            },
+            (err) => rej(err),
+            async () => {
+              try {
+                downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
+                res()
+              } catch (e) {
+                rej(e)
+              }
             }
-          }
-        )
-      })
+          )
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            try { uploadTask.cancel() } catch {}
+            reject(new Error('Firebase Storage timeout - using cloud database storage'))
+          }, 4000)
+        ),
+      ])
     } catch (err) {
       console.info('[Firebase Storage Notice]: Storage upload unavailable, trying cloud database fallback:', err.message)
     }
   }
+
+  onProgress(65)
 
   // 5. If Firebase Storage was unavailable, attempt Supabase Storage upload via API
   if (!downloadUrl && typeof window !== 'undefined') {
@@ -193,16 +203,21 @@ export async function uploadImageToFirebase({
         }),
       })
       if (apiRes.ok) {
-        const apiData = await apiRes.json()
-        if (apiData?.url) {
-          downloadUrl = apiData.url
-          storagePath = apiData.path || null
+        const contentType = apiRes.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const apiData = await apiRes.json()
+          if (apiData?.url) {
+            downloadUrl = apiData.url
+            storagePath = apiData.path || null
+          }
         }
       }
     } catch {
       // Offline / standalone mode
     }
   }
+
+  onProgress(85)
 
   // 6. Final public image URL: Cloud Storage URL or optimized Data URL
   const finalUrl = downloadUrl || optimized.dataUrl
