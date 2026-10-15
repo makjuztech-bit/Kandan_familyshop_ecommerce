@@ -297,9 +297,16 @@ export async function replaceFirebaseImage({
 export async function deleteFirebaseImage({ id, storagePath, targetKey }) {
   if (!id) throw new Error('No document ID specified for deletion.')
 
-  if (isFirebaseConfigured() && db) {
-    // 1. Delete from Firestore
-    await deleteDoc(doc(db, 'website_images', id))
+  // Always remove from local storage gallery
+  deleteFallbackLocalImage(id)
+
+  if (isFirebaseConfigured() && db && !id.startsWith('seed_') && !id.startsWith('local_')) {
+    try {
+      // 1. Delete from Firestore
+      await deleteDoc(doc(db, 'website_images', id))
+    } catch (err) {
+      console.warn('[Firestore delete warning]:', err.message)
+    }
 
     // 2. Delete from Storage
     if (storagePath && storage) {
@@ -310,20 +317,17 @@ export async function deleteFirebaseImage({ id, storagePath, targetKey }) {
         console.warn('[Storage delete warning]:', err.message)
       }
     }
+  }
 
-    // 3. If it was active on the website, clear or reset that section
-    if (targetKey) {
-      try {
-        const defaultMatch = WEBSITE_SECTIONS.find((s) => s.key === targetKey)
-        const fallbackUrl = defaultMatch ? defaultMatch.defaultUrl : ''
-        await setActiveWebsiteImage(targetKey, fallbackUrl, null)
-      } catch (err) {
-        console.warn('[Active section reset warning]:', err.message)
-      }
+  // 3. If it was active on the website, clear or reset that section
+  if (targetKey) {
+    try {
+      const defaultMatch = WEBSITE_SECTIONS.find((s) => s.key === targetKey)
+      const fallbackUrl = defaultMatch ? defaultMatch.defaultUrl : ''
+      await setActiveWebsiteImage(targetKey, fallbackUrl, null)
+    } catch (err) {
+      console.warn('[Active section reset warning]:', err.message)
     }
-  } else {
-    // Fallback local deletion
-    deleteFallbackLocalImage(id)
   }
 
   return true
@@ -474,7 +478,7 @@ export function subscribeToSiteImages(callback) {
 export function subscribeToImageGallery(callback) {
   if (isFirebaseConfigured() && db) {
     try {
-      const q = query(collection(db, 'website_images'), orderBy('createdAt', 'desc'))
+      const q = query(collection(db, 'website_images'))
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -483,11 +487,21 @@ export function subscribeToImageGallery(callback) {
             ...d.data(),
             createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
           }))
-          callback(items)
+          // Sort client-side by date to avoid composite index and missing field failures
+          items.sort((a, b) => {
+            const timeA = a.createdAt?.getTime ? a.createdAt.getTime() : new Date(a.createdAt || 0).getTime()
+            const timeB = b.createdAt?.getTime ? b.createdAt.getTime() : new Date(b.createdAt || 0).getTime()
+            return timeB - timeA
+          })
+
+          if (items.length > 0) {
+            callback(items)
+          } else {
+            callback(getFallbackLocalGallery())
+          }
         },
         (error) => {
-          console.error('[Gallery Listener Error]:', error)
-          // Fallback to local gallery if permissions error or offline
+          console.warn('[Gallery Listener Notice]:', error.message)
           callback(getFallbackLocalGallery())
         }
       )

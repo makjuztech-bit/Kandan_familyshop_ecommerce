@@ -611,45 +611,130 @@ function DeliveryTracker({orders}){
   )
 }
 
-export default function Admin(){useCatalog();const orders=useOrders(),[ok,setOk]=useState(()=>sessionStorage.getItem('kfs_admin')==='1'),[pw,setPw]=useState(''),[bad,setBad]=useState(false),[tab,setTab]=useState('dash'),[edit,setEdit]=useState(null),[m,setM]=useState(''),[q,setQ]=useState(''),[catFilter,setCatFilter]=useState('')
- const handleLogin=async e=>{
-   e.preventDefault();
-   setBad(false);
-   try {
-     const res=await fetch('/api/admin/login',{
-       method:'POST',
-       headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({password:pw}),
-     });
-     const data=await res.json();
-     if(data.ok && data.token){
-       sessionStorage.setItem('kfs_admin_token',data.token);
-       sessionStorage.setItem('kfs_admin','1');
-       setOk(true);
-       return;
-     }
-   } catch {}
-   if(pw===ADMIN_PASSWORD){
-     sessionStorage.setItem('kfs_admin','1');
-     setOk(true);
-   } else {
-     setBad(true);
-   }
- }
- if(!ok)return <main className="weave grid min-h-screen place-items-center bg-primary-dark p-4"><div className="w-full max-w-sm border-t-4 border-gold bg-ivory p-8 shadow-xl text-center"><div className="mx-auto mb-5 relative flex items-center justify-center h-24 w-24"><img src="/images/logo.png" alt="Sri Kandan Family Shop Logo" className="h-full w-full object-contain drop-shadow-md" /></div><h1 className="text-3xl font-serif">Admin login</h1><p className="mt-1 text-sm text-ink/70">Sri Kandan Family Shop · Secure Management Panel</p>
-  <form className="mt-5 space-y-4" onSubmit={handleLogin}><Field label="Password" id="pw" type="password" value={pw} onChange={e=>setPw(e.target.value)} error={bad&&'Incorrect password.'}/><button className={btnP+' w-full'}>Log in</button></form></div></main>
- const keys=['hero','banner','about',...COLLECTIONS.map(c=>'c:'+c)],newN=orders.filter(o=>(o.status||'New')==='New').length,rev=salesMetrics(orders).revenue
- const shown=products.filter(p=>{
-   if(catFilter && p.collection!==catFilter) return false
-   if(!q) return true
-   const s=q.toLowerCase()
-   return p.name.toLowerCase().includes(s) || (p.sku && p.sku.toLowerCase().includes(s)) || p.colour.toLowerCase().includes(s)
- }),go=k=>{setTab(k);setEdit(null)}
- const nb=k=>`flex min-h-11 items-center justify-between gap-2 whitespace-nowrap px-3 text-left text-sm font-bold ${tab===k?'bg-ivory text-primary':'text-ivory/90 hover:bg-white/10'}`
- return <div className="min-h-screen bg-ivory-dark/60 md:flex"><aside className="weave bg-primary-dark text-ivory md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col"><div className="p-4 md:p-6"><div className="mb-3 relative flex items-center justify-center h-16 w-16"><img src="/images/logo.png" alt="Sri Kandan Family Shop Logo" className="h-full w-full object-contain drop-shadow" /></div><p className="font-serif text-xl">Sri Kandan Family Shop</p><p className="text-xs text-gold">Admin panel · verified</p></div>
-  <nav aria-label="Admin" className="flex gap-1 overflow-x-auto px-2 pb-3 md:flex-1 md:flex-col md:overflow-visible md:px-3">{NAV.map(([k,l])=><button key={k} onClick={()=>go(k)} aria-current={tab===k} className={nb(k)}>{l}{k==='orders'&&newN>0&&<span className="rounded-full bg-gold px-2 text-xs text-ink">{newN}</span>}</button>)}
-   <Link to="/" className={nb('')+' md:mt-auto'}>View shop</Link><button className={nb('')} onClick={()=>{sessionStorage.removeItem('kfs_admin');sessionStorage.removeItem('kfs_admin_token');setOk(false)}}>Log out</button></nav></aside>
-  <main className="min-w-0 flex-1 p-4 sm:p-8">{isSupabaseConfigured ? (
+export default function Admin({ embedded = false }) {
+  useCatalog()
+  const orders = useOrders()
+  const [ok, setOk] = useState(() => embedded || sessionStorage.getItem('kfs_admin') === '1' || localStorage.getItem('kfs_admin') === '1')
+  const [pw, setPw] = useState('')
+  const [bad, setBad] = useState(false)
+  const [tab, setTab] = useState(embedded ? 'products' : 'dash')
+  const [edit, setEdit] = useState(null)
+  const [m, setM] = useState('')
+  const [q, setQ] = useState('')
+  const [catFilter, setCatFilter] = useState('')
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setBad(false)
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      })
+      const data = await res.json()
+      if (data.ok && data.token) {
+        sessionStorage.setItem('kfs_admin_token', data.token)
+        sessionStorage.setItem('kfs_admin', '1')
+        setOk(true)
+        return
+      }
+    } catch {}
+    if (pw === ADMIN_PASSWORD) {
+      sessionStorage.setItem('kfs_admin', '1')
+      setOk(true)
+    } else {
+      setBad(true)
+    }
+  }
+
+  if (!ok && !embedded) {
+    return (
+      <main className="weave grid min-h-screen place-items-center bg-primary-dark p-4">
+        <div className="w-full max-w-sm border-t-4 border-gold bg-ivory p-8 shadow-xl text-center">
+          <div className="mx-auto mb-5 relative flex items-center justify-center h-24 w-24">
+            <img src="/images/logo.png" alt="Sri Kandan Family Shop Logo" className="h-full w-full object-contain drop-shadow-md" />
+          </div>
+          <h1 className="text-3xl font-serif">Admin login</h1>
+          <p className="mt-1 text-sm text-ink/70">Sri Kandan Family Shop · Secure Management Panel</p>
+          <form className="mt-5 space-y-4" onSubmit={handleLogin}>
+            <Field label="Password" id="pw" type="password" value={pw} onChange={e => setPw(e.target.value)} error={bad && 'Incorrect password.'} />
+            <button className={btnP + ' w-full'}>Log in</button>
+          </form>
+        </div>
+      </main>
+    )
+  }
+
+  const keys = ['hero', 'banner', 'about', ...COLLECTIONS.map(c => 'c:' + c)]
+  const newN = orders.filter(o => (o.status || 'New') === 'New').length
+  const rev = salesMetrics(orders).revenue
+  const shown = products.filter(p => {
+    if (catFilter && p.collection !== catFilter) return false
+    if (!q) return true
+    const s = q.toLowerCase()
+    return p.name.toLowerCase().includes(s) || (p.sku && p.sku.toLowerCase().includes(s)) || p.colour.toLowerCase().includes(s)
+  })
+  const go = k => { setTab(k); setEdit(null) }
+  const nb = k => `flex min-h-11 items-center justify-between gap-2 whitespace-nowrap px-3 text-left text-sm font-bold ${tab === k ? 'bg-ivory text-primary' : 'text-ivory/90 hover:bg-white/10'}`
+
+  return (
+    <div className={embedded ? "p-4 sm:p-6 bg-ivory/30" : "min-h-screen bg-ivory-dark/60 md:flex"}>
+      {embedded ? (
+        <div className="mb-6 border-b border-gold/30 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h1 className="text-2xl font-serif font-bold text-primary flex items-center gap-2">
+                <span>Catalogue & Orders Management</span>
+              </h1>
+              <p className="text-xs text-ink/70 mt-0.5">
+                Manage inventory, products, pricing, stock levels, and customer orders.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {NAV.map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => go(k)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                  tab === k
+                    ? 'bg-primary text-ivory shadow-md ring-1 ring-gold'
+                    : 'bg-ivory hover:bg-gold/20 text-primary border border-gold/40'
+                }`}
+              >
+                <span>{l}</span>
+                {k === 'orders' && newN > 0 && (
+                  <span className="rounded-full bg-gold px-2 py-0.2 text-[10px] text-ink font-extrabold">
+                    {newN}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <aside className="weave bg-primary-dark text-ivory md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col">
+          <div className="p-4 md:p-6">
+            <div className="mb-3 relative flex items-center justify-center h-16 w-16">
+              <img src="/images/logo.png" alt="Sri Kandan Family Shop Logo" className="h-full w-full object-contain drop-shadow" />
+            </div>
+            <p className="font-serif text-xl">Sri Kandan Family Shop</p>
+            <p className="text-xs text-gold">Admin panel · verified</p>
+          </div>
+          <nav aria-label="Admin" className="flex gap-1 overflow-x-auto px-2 pb-3 md:flex-1 md:flex-col md:overflow-visible md:px-3">
+            {NAV.map(([k, l]) => (
+              <button key={k} onClick={() => go(k)} aria-current={tab === k} className={nb(k)}>
+                {l}
+                {k === 'orders' && newN > 0 && <span className="rounded-full bg-gold px-2 text-xs text-ink">{newN}</span>}
+              </button>
+            ))}
+            <Link to="/" className={nb('') + ' md:mt-auto'}>View shop</Link>
+            <button className={nb('')} onClick={() => { sessionStorage.removeItem('kfs_admin'); sessionStorage.removeItem('kfs_admin_token'); setOk(false) }}>Log out</button>
+          </nav>
+        </aside>
+      )}
+      <main className={embedded ? "min-w-0" : "min-w-0 flex-1 p-4 sm:p-8"}>{isSupabaseConfigured ? (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-900 shadow-sm">
       <span>⚡ <strong>Supabase Connected:</strong> Products and orders sync live with your cloud Supabase database.</span>
       <span className="rounded bg-emerald-200 px-2.5 py-0.5 font-bold text-emerald-900">Cloud DB Active</span>
@@ -722,6 +807,8 @@ export default function Admin(){useCatalog();const orders=useOrders(),[ok,setOk]
     {k==='hero'&&<div className="mt-2 flex items-center justify-between border-t border-gold/20 pt-2 text-xs">
       <span className="text-emerald font-bold">✓ Fixed &amp; Persistent</span>
       <button type="button" onClick={async ()=>{await resetBackgroundImage();await setSiteImage('hero',DEFAULT_BACKGROUND)}} className="text-red-700 underline">Reset to Showroom Default</button>
-    </div>}  </div>)}</div>{m&&<p role="alert" className="mt-3 text-red-700">{m}</p>}</>}</main></div>}
+    </div>}  </div>)}</div>{m&&<p role="alert" className="mt-3 text-red-700">{m}</p>}</>}</main></div>
+  )
+}
 
 
