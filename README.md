@@ -1,4 +1,4 @@
-# Kandan Family Shop (demo)
+# Kandan Family Shop 
 
 Run `npm install`, copy `.env.example` to `.env`, configure Gmail SMTP as below, then run `npm run dev`. Vite prints the storefront URL. Build the frontend with `npm run build`. The root `.env` is read by the mail API; Vite uses a separate `client-env/` directory so editing server mail settings does not restart and stop the API.
 
