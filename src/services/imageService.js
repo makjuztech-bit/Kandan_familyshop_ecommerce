@@ -159,9 +159,11 @@ export async function uploadImageToFirebase({
 
       await Promise.race([
         new Promise((res, rej) => {
+          let hasTransferred = false
           uploadTask.on(
             'state_changed',
             (snapshot) => {
+              if (snapshot.bytesTransferred > 0) hasTransferred = true
               const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 40) + 35
               onProgress(Math.min(85, progress))
             },
@@ -175,12 +177,20 @@ export async function uploadImageToFirebase({
               }
             }
           )
+
+          // Fast connection probe: if Firebase Storage bucket cannot connect in 2s, don't stall UI
+          setTimeout(() => {
+            if (!hasTransferred && !downloadUrl) {
+              try { uploadTask.cancel() } catch {}
+              rej(new Error('Firebase Storage bucket not responding - falling back to cloud database'))
+            }
+          }, 2000)
         }),
         new Promise((_, reject) =>
           setTimeout(() => {
             try { uploadTask.cancel() } catch {}
             reject(new Error('Firebase Storage timeout - using cloud database storage'))
-          }, 45000)
+          }, 5000)
         ),
       ])
     } catch (err) {
@@ -193,7 +203,10 @@ export async function uploadImageToFirebase({
   // 5. If Firebase Storage was unavailable, attempt Supabase Storage upload via API
   if (!downloadUrl && typeof window !== 'undefined') {
     try {
+      const abortCtrl = new AbortController()
+      const fetchTimer = setTimeout(() => abortCtrl.abort(), 2000)
       const apiRes = await fetch(`${API_BASE}/api/upload`, {
+        signal: abortCtrl.signal,
         method: 'POST',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({
@@ -202,6 +215,7 @@ export async function uploadImageToFirebase({
           folder: category.toLowerCase().replace(/\s+/g, '-'),
         }),
       })
+      clearTimeout(fetchTimer)
       if (apiRes.ok) {
         const contentType = apiRes.headers.get('content-type') || ''
         if (contentType.includes('application/json')) {
@@ -213,7 +227,7 @@ export async function uploadImageToFirebase({
         }
       }
     } catch {
-      // Offline / standalone mode
+      // Offline / standalone mode / timeout
     }
   }
 
