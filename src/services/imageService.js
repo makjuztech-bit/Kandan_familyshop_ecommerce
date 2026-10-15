@@ -180,7 +180,7 @@ export async function uploadImageToFirebase({
           setTimeout(() => {
             try { uploadTask.cancel() } catch {}
             reject(new Error('Firebase Storage timeout - using cloud database storage'))
-          }, 4000)
+          }, 45000)
         ),
       ])
     } catch (err) {

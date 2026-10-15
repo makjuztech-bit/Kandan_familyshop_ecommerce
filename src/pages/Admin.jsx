@@ -186,6 +186,7 @@ function Form({ init, onDone }) {
     images: Array.isArray(init.images) && init.images.length ? [...init.images] : ['', '', '', ''],
   }))
   const [err, setErr] = useState('')
+  const [savedLiveMsg, setSavedLiveMsg] = useState('')
   const set = (k, v) => setP({ ...p, [k]: v })
 
   const priceNum = +p.price || 0
@@ -334,7 +335,17 @@ function Form({ init, onDone }) {
                 label={i === 0 ? 'Main Photo' : `Gallery Image ${i + 1}`}
                 folder="products"
                 value={imgUrl}
-                onChange={(v) => set('images', p.images.map((x, j) => (j === i ? v : x)))}
+                onChange={async (v) => {
+                  const nextImgs = p.images.map((x, j) => (j === i ? v : x))
+                  set('images', nextImgs)
+                  if (init?.id && !init.id.startsWith('new_')) {
+                    try {
+                      await saveProduct({ ...p, images: nextImgs.filter(Boolean) })
+                      setSavedLiveMsg('Photo updated and stored in live automatic!')
+                      setTimeout(() => setSavedLiveMsg(''), 4000)
+                    } catch (e) { console.warn(e) }
+                  }
+                }}
               />
             </div>
           ))}
@@ -350,6 +361,7 @@ function Form({ init, onDone }) {
         )}
       </div>
 
+      {savedLiveMsg && <p className="text-emerald-800 font-bold text-xs bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl shadow-sm animate-fade-in">✓ {savedLiveMsg}</p>}
       {err && <p role="alert" className="text-red-700 font-bold text-sm">{err}</p>}
 
       <div className="flex gap-3 border-t border-gold/30 pt-4">

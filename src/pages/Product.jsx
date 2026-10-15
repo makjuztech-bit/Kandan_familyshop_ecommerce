@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
-import { byId, products, inr } from '../data/products'
+import { byId, products, inr, useCatalog } from '../data/products'
 import { useStore } from '../context/Store'
 import { Img, Wrap, Grid, btnP, btnO, WhatsApp } from '../components/ui'
 import { NotFound } from './Info'
@@ -8,9 +8,10 @@ import { CustomerReviews } from '../components/Reviews'
 import { ReviewSummary } from '../components/Rating'
 
 export default function Product() {
+  useCatalog()
   const { id } = useParams()
   const location = useLocation()
-  const p = byId[id]
+  const p = byId[id] || products.find((x) => x.id === id)
   const { add, toggleWish, wish } = useStore()
   const nv = useNavigate()
 

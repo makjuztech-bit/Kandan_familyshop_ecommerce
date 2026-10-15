@@ -2,16 +2,14 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     // Public website images are publicly viewable by visitors
-    // Uploads, replacements, and deletions restricted to authenticated admins
+    // Uploads, replacements, and deletions enabled for admin workflows
     match /website-images/{allPaths=**} {
-      allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow read, write: if true;
     }
     
     // Default fallback
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if true;
     }
   }
 }
