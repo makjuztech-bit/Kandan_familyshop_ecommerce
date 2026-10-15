@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url'
 import nodemailer from 'nodemailer'
 import { supabaseServer, isServerSupabaseConfigured } from './supabase.js'
 import { processOrderLoyalty, reverseOrderLoyaltyPoints } from './loyalty.js'
+import {
+  sendWhatsAppNotification,
+  formatOrderPlacedMessage,
+  formatOrderStatusMessage,
+} from './whatsapp.js'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const databasePath = resolve(process.env.REVIEWS_DB_PATH || `${root}/data/reviews.sqlite`)
@@ -53,6 +58,10 @@ try { database.exec(`ALTER TABLE orders ADD COLUMN points_redeemed INTEGER DEFAU
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_discount REAL DEFAULT 0`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_awarded INTEGER DEFAULT 0`) } catch {}
 try { database.exec(`ALTER TABLE orders ADD COLUMN points_reversed INTEGER DEFAULT 0`) } catch {}
+try { database.exec(`ALTER TABLE orders ADD COLUMN whatsapp_sent INTEGER DEFAULT 0`) } catch {}
+try { database.exec(`ALTER TABLE orders ADD COLUMN whatsapp_status TEXT DEFAULT ''`) } catch {}
+try { database.exec(`ALTER TABLE orders ADD COLUMN whatsapp_message_id TEXT DEFAULT ''`) } catch {}
+try { database.exec(`ALTER TABLE orders ADD COLUMN whatsapp_error TEXT DEFAULT ''`) } catch {}
 
 const insertStmt = database.prepare(`
   INSERT INTO orders (
@@ -88,6 +97,10 @@ const updateEmailStmt = database.prepare(`
 
 const updateStatusStmt = database.prepare(`
   UPDATE orders SET order_status = COALESCE(?, order_status), payment_status = COALESCE(?, payment_status) WHERE no = ?
+`)
+
+const updateWhatsAppStmt = database.prepare(`
+  UPDATE orders SET whatsapp_sent = ?, whatsapp_status = ?, whatsapp_message_id = ?, whatsapp_error = ? WHERE no = ?
 `)
 
 const deleteStmt = database.prepare(`
@@ -137,6 +150,10 @@ function formatRow(row) {
     at: new Date(row.created_at).toLocaleString('en-IN'),
     emailSent: Boolean(row.email_sent),
     emailError: row.email_error,
+    whatsappSent: Boolean(row.whatsapp_sent),
+    whatsappStatus: row.whatsapp_status || 'none',
+    whatsappMessageId: row.whatsapp_message_id || '',
+    whatsappError: row.whatsapp_error || '',
   }
 }
 
@@ -229,6 +246,34 @@ export function saveOrderToDatabase(orderData) {
       console.log(`✅ [Loyalty] Order ${no}: +${pointsEarned} pts awarded automatically (Balance: ${newLoyaltyBalance} pts)`)
     } catch (loyaltyErr) {
       console.warn('⚠️ Loyalty points calculation error:', loyaltyErr.message)
+    }
+  }
+
+  // Dispatch automated WhatsApp notification asynchronously
+  const formattedOrder = getOrderByNo(no) || { ...orderData, no }
+  if (orderData.phone) {
+    try {
+      const waMsg = formatOrderPlacedMessage(formattedOrder)
+      sendWhatsAppNotification({
+        toPhone: orderData.phone,
+        message: waMsg,
+        orderNo: no,
+        eventType: 'order_placed',
+      }).then((waRes) => {
+        try {
+          updateWhatsAppStmt.run(
+            waRes.ok ? 1 : 0,
+            waRes.status || (waRes.ok ? 'sent' : 'error'),
+            waRes.messageId || '',
+            waRes.error || '',
+            no
+          )
+        } catch {}
+      }).catch((err) => {
+        console.warn('[WhatsApp Error on creation]:', err.message)
+      })
+    } catch (err) {
+      console.warn('[WhatsApp notice]:', err.message)
     }
   }
 
@@ -334,7 +379,63 @@ export function updateOrderInDatabase(no, patch = {}) {
     }
   }
 
+  // Dispatch automated WhatsApp status change notification
+  if (orderStatus) {
+    const updated = getOrderByNo(no)
+    if (updated && updated.phone) {
+      try {
+        const waMsg = formatOrderStatusMessage(updated, orderStatus)
+        sendWhatsAppNotification({
+          toPhone: updated.phone,
+          message: waMsg,
+          orderNo: no,
+          eventType: 'status_changed',
+        }).then((waRes) => {
+          try {
+            updateWhatsAppStmt.run(
+              waRes.ok ? 1 : 0,
+              waRes.status || (waRes.ok ? 'sent' : 'error'),
+              waRes.messageId || '',
+              waRes.error || '',
+              no
+            )
+          } catch {}
+        }).catch((err) => {
+          console.warn('[WhatsApp Error on update]:', err.message)
+        })
+      } catch (err) {
+        console.warn('[WhatsApp notice]:', err.message)
+      }
+    }
+  }
+
   return getOrderByNo(no)
+}
+
+export async function sendOrderWhatsAppNotification(no, customMessage = null) {
+  const order = getOrderByNo(no)
+  if (!order) throw new Error('Order not found.')
+  if (!order.phone) throw new Error('Customer phone number is missing on this order.')
+
+  const message = customMessage || formatOrderPlacedMessage(order)
+  const result = await sendWhatsAppNotification({
+    toPhone: order.phone,
+    message,
+    orderNo: no,
+    eventType: 'manual_dispatch',
+  })
+
+  try {
+    updateWhatsAppStmt.run(
+      result.ok ? 1 : 0,
+      result.status || (result.ok ? 'sent' : 'error'),
+      result.messageId || '',
+      result.error || '',
+      no
+    )
+  } catch {}
+
+  return result
 }
 
 export function deleteOrderFromDatabase(no) {

@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerReviewRoutes } from './reviews.js'
 import { registerLoyaltyRoutes } from './loyalty.js'
-import { saveOrderToDatabase, getAllOrders, getOrderByNo, updateOrderInDatabase, deleteOrderFromDatabase, sendOrderConfirmationEmail } from './orders.js'
+import { saveOrderToDatabase, getAllOrders, getOrderByNo, updateOrderInDatabase, deleteOrderFromDatabase, sendOrderConfirmationEmail, sendOrderWhatsAppNotification } from './orders.js'
 import { registerRazorpayRoutes } from './razorpay.js'
 import { uploadImage, parseDataUrl, deleteImage } from './uploads.js'
 import { getAllProducts, getProductById, saveProductToDatabase, deleteProductFromDatabase, resetProductsToSeed } from './products.js'
@@ -259,6 +259,16 @@ app.delete('/api/orders/:no', requireAdminAuth, (req, res) => {
   try {
     deleteOrderFromDatabase(req.params.no)
     res.json({ ok: true, message: 'Order deleted successfully.' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/orders/:no/whatsapp', requireAdminAuth, async (req, res) => {
+  try {
+    const { message } = req.body || {}
+    const result = await sendOrderWhatsAppNotification(req.params.no, message)
+    res.json({ ok: true, result })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

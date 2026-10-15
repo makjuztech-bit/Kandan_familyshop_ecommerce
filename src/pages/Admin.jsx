@@ -368,9 +368,77 @@ const Badge=({s})=><span className={'rounded-full px-2.5 py-0.5 text-xs font-bol
 function Orders({orders,limit}){const list=limit?orders.slice(0,limit):orders
  if(!list.length)return <p className="border border-gold/40 bg-white p-8 text-center text-ink/70">No orders yet. Orders placed through the shop checkout appear here instantly.</p>
  const resendEmail=async o=>{updateOrder(o.no,{emailStatus:'sending',emailError:''});try{await sendOrderNotification(o);updateOrder(o.no,{emailStatus:'sent',emailError:''})}catch(error){updateOrder(o.no,{emailStatus:'error',emailError:error instanceof Error?error.message:'Could not send the order email.'})}}
+ const sendWhatsApp=async o=>{
+  updateOrder(o.no,{whatsappStatus:'sending',whatsappError:''})
+  try {
+    const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(o.no)}/whatsapp`, {
+      method: 'POST',
+      headers: getAdminAuthHeaders()
+    })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.result?.ok) {
+      updateOrder(o.no, { whatsappStatus: 'sent', whatsappError: '' })
+    } else {
+      const errorMsg = data?.result?.message || data?.error || 'Provider unconfigured.'
+      const status = data?.result?.unconfigured ? 'unconfigured' : 'error'
+      updateOrder(o.no, { whatsappStatus: status, whatsappError: errorMsg })
+    }
+  } catch (err) {
+    updateOrder(o.no, { whatsappStatus: 'error', whatsappError: err.message })
+  }
+ }
  return <ul className="space-y-4">{list.map(o=><li key={o.no} className="border border-gold/40 bg-white p-4 shadow-sm sm:p-5 text-slate-900"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-gold/30 pb-3"><div><p className="font-bold text-slate-900">{o.no} <Badge s={o.status}/></p><p className="mt-1 text-xs text-slate-500">{o.at}</p></div><p className="font-serif text-xl font-bold text-primary lining-nums tabular-nums">{inr(o.total)}</p></div>
   <div className="mt-4 grid gap-5 text-sm sm:grid-cols-2 text-slate-900"><section><h3 className="font-bold text-slate-900">Customer &amp; delivery</h3><dl className="mt-2 space-y-1 text-slate-800"><div><dt className="inline font-semibold text-slate-600">Name: </dt><dd className="inline font-medium text-slate-900">{o.name}</dd></div><div><dt className="inline font-semibold text-slate-600">Phone: </dt><dd className="inline"><a href={'tel:'+o.phone} className="underline text-primary hover:text-primary-dark font-medium">{o.phone}</a></dd></div><div><dt className="inline font-semibold text-slate-600">Email: </dt><dd className="inline"><a href={'mailto:'+o.email} className="break-all underline text-primary hover:text-primary-dark">{o.email}</a></dd></div><div><dt className="inline font-semibold text-slate-600">Address: </dt><dd className="inline text-slate-800">{o.address}</dd></div></dl></section><section><h3 className="font-bold text-slate-900">Items</h3><ul className="mt-2 list-inside list-disc text-slate-800 space-y-1">{lines(o).map((l,i)=><li key={i}>{l}</li>)}</ul></section></div>
-  {!limit&&<div className="mt-4 space-y-3 border-t border-gold/30 pt-3 text-slate-900"><div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-bold text-slate-800">Email notification to {SHOP.email}:</span><span role={o.emailStatus==='error'?'alert':'status'} className="text-slate-700">{o.emailStatus==='sent'?'Sent':o.emailStatus==='sending'?'Sending…':o.emailStatus==='error'?'Failed':'No send record'}</span>{o.emailError&&<span className="text-red-700">{o.emailError}</span>}</div><div className="flex flex-wrap items-center gap-3"><button type="button" className={btnO} disabled={o.emailStatus==='sending'||o.emailStatus==='sent'} onClick={()=>resendEmail(o)}>{o.emailStatus==='sending'?'Sending…':o.emailStatus==='sent'?'Email sent':'Send / retry email'}</button><WhatsApp label="WhatsApp order enquiry" text={`Hello Sri Kandan Family Shop, I am enquiring about order ${o.no}.\nItems: ${lines(o).join(', ')}\nTotal: ${inr(o.total)}`}/><label className="text-sm font-bold text-slate-800" htmlFor={'st'+o.no}>Order status</label><select id={'st'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900" value={o.status||'New'} onChange={e=>updateOrder(o.no,{status:e.target.value})}>{STATUS.map(x=><option key={x}>{x}</option>)}</select><label className="text-sm font-bold text-slate-800" htmlFor={'pay'+o.no}>Payment</label><select id={'pay'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900" value={o.paymentStatus||'unpaid'} onChange={e=>updateOrder(o.no,{paymentStatus:e.target.value})}>{PAYMENTS.map(x=><option key={x} value={x}>{x}</option>)}</select><button className="ml-auto min-h-11 px-3 text-sm text-red-700 underline" onClick={()=>confirm('Delete order '+o.no+'?')&&deleteOrder(o.no)}>Delete</button></div></div>}
+  {!limit && (
+    <div className="mt-4 space-y-3 border-t border-gold/30 pt-3 text-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-ivory/60 p-2.5 rounded-lg border border-gold/20">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-slate-800">✉ Email:</span>
+          <span className={'px-2 py-0.5 rounded font-bold ' + (o.emailStatus === 'sent' ? 'bg-emerald-100 text-emerald-800' : o.emailStatus === 'sending' ? 'bg-amber-100 text-amber-800' : o.emailStatus === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600')}>
+            {o.emailStatus === 'sent' ? '✓ Sent' : o.emailStatus === 'sending' ? 'Sending…' : o.emailStatus === 'error' ? 'Failed' : 'Pending'}
+          </span>
+          {o.emailError && <span className="text-red-700">{o.emailError}</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-slate-800">💬 WhatsApp:</span>
+          <span className={'px-2 py-0.5 rounded font-bold ' + (o.whatsappStatus === 'sent' ? 'bg-emerald-100 text-emerald-800' : o.whatsappStatus === 'sending' ? 'bg-amber-100 text-amber-800' : o.whatsappStatus === 'unconfigured' ? 'bg-amber-50 text-amber-900 border border-amber-300' : o.whatsappStatus === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600')}>
+            {o.whatsappStatus === 'sent' ? '✓ Sent via API' : o.whatsappStatus === 'sending' ? 'Sending…' : o.whatsappStatus === 'unconfigured' ? 'API Ready / Manual' : o.whatsappStatus === 'error' ? 'Failed' : 'Pending'}
+          </span>
+          {o.whatsappError && <span className="text-red-700 max-w-xs truncate" title={o.whatsappError}>{o.whatsappError}</span>}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={btnO + ' text-xs'} disabled={o.emailStatus==='sending'} onClick={()=>resendEmail(o)}>
+          {o.emailStatus==='sending'?'Sending email…':o.emailStatus==='sent'?'Resend Email':'Send Email'}
+        </button>
+        <button type="button" className={btnO + ' text-xs'} disabled={o.whatsappStatus==='sending'} onClick={()=>sendWhatsApp(o)}>
+          {o.whatsappStatus==='sending'?'Sending WA…':'Trigger WhatsApp API'}
+        </button>
+        {(() => {
+          const clean = (o.phone || '').replace(/\D/g, '')
+          const waNum = clean.length === 10 ? '91' + clean : clean
+          const msg = encodeURIComponent(`Namaste ${o.name || 'Customer'}, your order #${o.no} from Sri Kandan Family Shop is currently ${(o.status || 'Confirmed').toUpperCase()}. Total: ${inr(o.total)}. Track live delivery: https://kandan-ecommerce.web.app/delivery?order=${o.no}`)
+          return waNum ? (
+            <a href={`https://wa.me/${waNum}?text=${msg}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-sm">
+              <span>💬 Message Customer</span>
+              <span>↗</span>
+            </a>
+          ) : null
+        })()}
+        <label className="text-sm font-bold text-slate-800" htmlFor={'st'+o.no}>Order status</label>
+        <select id={'st'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900 font-semibold" value={o.status||'New'} onChange={e=>updateOrder(o.no,{status:e.target.value})}>
+          {STATUS.map(x=><option key={x}>{x}</option>)}
+        </select>
+        <label className="text-sm font-bold text-slate-800" htmlFor={'pay'+o.no}>Payment</label>
+        <select id={'pay'+o.no} className="min-h-11 border border-gold-dark/50 bg-white px-2 text-slate-900 font-semibold" value={o.paymentStatus||'unpaid'} onChange={e=>updateOrder(o.no,{paymentStatus:e.target.value})}>
+          {PAYMENTS.map(x=><option key={x} value={x}>{x}</option>)}
+        </select>
+        <button className="ml-auto min-h-11 px-3 text-sm text-red-700 underline" onClick={()=>confirm('Delete order '+o.no+'?')&&deleteOrder(o.no)}>
+          Delete
+        </button>
+      </div>
+    </div>
+  )}
  </li>)}</ul>}
 
 function DeliveryTracker({orders}){

@@ -8,23 +8,48 @@ const snapshot=()=>summaries
 let summaryRequest
 
 async function responseBody(response){
+ const contentType = response.headers?.get('content-type') || ''
+ // If response is HTML (e.g. SPA index.html rewrite or proxy error page), return graceful empty fallback
+ if (contentType.includes('text/html') || (!contentType.includes('application/json') && !contentType.includes('text/plain'))) {
+  if (!response.ok) throw new Error(`Review service unavailable (HTTP ${response.status}).`)
+  return {}
+ }
+ let text = ''
+ try {
+  text = await response.text()
+ } catch {
+  return {}
+ }
+ if (!text || !text.trim()) return {}
  let body
- try{body=await response.json()}catch{throw new Error(`Review service returned an invalid response (HTTP ${response.status}).`)}
- if(!response.ok)throw new Error(body.error||`Review service failed (HTTP ${response.status}).`)
- return body
+ try {
+  body = JSON.parse(text)
+ } catch {
+  // If parsing fails despite 200, return safe empty object instead of throwing fatal invalid response error
+  return {}
+ }
+ if (!response.ok) throw new Error(body?.error || `Review service failed (HTTP ${response.status}).`)
+ return body || {}
 }
 
 async function loadSummaries(force=false){
  if(summaries.status==='loaded'&&!force)return summaries.data
  if(summaryRequest&&!force)return summaryRequest
  publish({...summaries,status:'loading',error:''})
- summaryRequest=fetch('/api/reviews/summary').then(responseBody).then(data=>{
-  publish({status:'loaded',data,error:''})
-  return data
- }).catch(error=>{
-  publish({status:'error',data:summaries.data,error:error instanceof Error?error.message:'Could not load ratings.'})
-  throw error
- }).finally(()=>{summaryRequest=undefined})
+ summaryRequest=fetch('/api/reviews/summary')
+  .then(responseBody)
+  .then(data=>{
+   const cleanData = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {}
+   publish({status:'loaded',data:cleanData,error:''})
+   return cleanData
+  })
+  .catch(error=>{
+   // Non-fatal fallback: Provide empty ratings data so UI displays gracefully without crashing
+   const fallbackData = summaries.data || {}
+   publish({status:'loaded',data:fallbackData,error:''})
+   return fallbackData
+  })
+  .finally(()=>{summaryRequest=undefined})
  return summaryRequest
 }
 
@@ -46,7 +71,22 @@ export function useReviewFeed({productId='',rating=0,sort='recent',page=1,limit=
   setFeed(current=>({...current,loading:true,error:''}))
   fetch(`/api/reviews?${query}`)
    .then(responseBody)
-   .then(data=>{if(active)setFeed(current=>({...data,items:page>1&&current.key===key?[...current.items,...data.items]:data.items,key,loading:false,error:''}))})
+   .then(data=>{
+    if(active){
+      const items = Array.isArray(data?.items) ? data.items : []
+      const summary = data?.summary || { average: 0, total: 0, breakdown: [] }
+      setFeed(current=>({
+        ...data,
+        items: page>1&&current.key===key?[...current.items,...items]:items,
+        summary,
+        total: Number(data?.total) || items.length,
+        pages: Number(data?.pages) || 0,
+        key,
+        loading: false,
+        error: ''
+      }))
+    }
+   })
    .catch(error=>{if(active)setFeed(current=>({...current,loading:false,error:error instanceof Error?error.message:'Could not load customer reviews.'}))})
   return()=>{active=false}
  },[productId,rating,sort,page,limit,reload])

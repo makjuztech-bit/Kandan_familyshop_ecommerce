@@ -2,6 +2,15 @@ import { useSyncExternalStore } from 'react'
 import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { uploadImageToFirebase, setActiveWebsiteImage } from '../services/imageService'
+import { db, isFirebaseConfigured } from '../services/firebase'
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  onSnapshot,
+} from 'firebase/firestore'
 import rawProducts from './raw-products.json'
 
 export const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN')
@@ -152,6 +161,22 @@ export async function syncCatalogWithServer() {
     let prods = null
     let settings = null
 
+    // 0. Sync live products from Cloud Firestore if configured
+    if (isFirebaseConfigured() && db) {
+      try {
+        const snap = await getDocs(collection(db, 'products'))
+        if (!snap.empty) {
+          const fbProds = []
+          snap.forEach(docSnap => {
+            fbProds.push({ ...docSnap.data(), id: docSnap.id })
+          })
+          if (fbProds.length > 0) prods = fbProds
+        }
+      } catch (fbErr) {
+        console.info('[Firestore catalog sync notice]:', fbErr.message)
+      }
+    }
+
     // 1. Sync live products from Supabase cloud database if configured
     if (isSupabaseConfigured && supabase) {
       try {
@@ -197,9 +222,32 @@ export async function syncCatalogWithServer() {
   }
 }
 
+let firestoreProductUnsub = null
+function setupFirestoreProductsListener() {
+  if (firestoreProductUnsub) return
+  if (!isFirebaseConfigured() || !db) return
+  try {
+    firestoreProductUnsub = onSnapshot(collection(db, 'products'), (snapshot) => {
+      if (!snapshot.empty) {
+        const remoteProds = []
+        snapshot.forEach(docSnap => {
+          remoteProds.push({ ...docSnap.data(), id: docSnap.id })
+        })
+        if (remoteProds.length > 0) {
+          load(remoteProds)
+          emit()
+        }
+      }
+    }, () => {})
+  } catch {}
+}
+
 if (typeof window !== 'undefined') {
   // Trigger server sync immediately on client
-  setTimeout(syncCatalogWithServer, 10)
+  setTimeout(() => {
+    syncCatalogWithServer()
+    setupFirestoreProductsListener()
+  }, 10)
 
   window.addEventListener('storage', () => {
     load()
@@ -250,6 +298,15 @@ export async function saveProduct(p) {
     processedImages.push(img)
   }
   sanitized.images = processedImages
+
+  // 0. Save to Cloud Firestore
+  if (isFirebaseConfigured() && db) {
+    try {
+      await setDoc(doc(db, 'products', sanitized.id), sanitized, { merge: true })
+    } catch (fbErr) {
+      console.warn('[Firestore saveProduct notice]:', fbErr.message)
+    }
+  }
 
   // 1. Save to Supabase cloud database if available
   if (isSupabaseConfigured && supabase) {
@@ -307,6 +364,15 @@ function savedProductLocal(p) {
 
 export async function deleteProduct(id) {
   if (!id) return
+
+  // 0. Delete from Cloud Firestore
+  if (isFirebaseConfigured() && db) {
+    try {
+      await deleteDoc(doc(db, 'products', id))
+    } catch (fbErr) {
+      console.warn('[Firestore deleteProduct notice]:', fbErr.message)
+    }
+  }
 
   // 1. Delete from Supabase if connected
   if (isSupabaseConfigured && supabase) {

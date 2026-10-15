@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../context/Store'
-import { useOrders } from '../data/orders'
+import { useOrders, getOrderByNo } from '../data/orders'
 import {
   changeDemoPassword,
   getDemoUser,
@@ -602,11 +602,66 @@ export function OrderDetails() {
   const { orderId } = useParams()
   const orders = useOrders()
   const session = useAuthStatus()
-  const order = orders.find(item => item.no === orderId&&(item.email||'').toLowerCase()===(session?.email||'').toLowerCase())
+  const [fetchedOrder, setFetchedOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const normalizedOrderId = (orderId || '').trim().toLowerCase()
+  const localOrder = orders.find(item =>
+    (item.no || '').trim().toLowerCase() === normalizedOrderId &&
+    (!session?.email || (item.email || '').toLowerCase() === (session.email || '').toLowerCase())
+  )
+
+  useEffect(() => {
+    let active = true
+    if (localOrder) {
+      setFetchedOrder(localOrder)
+      setLoading(false)
+      return
+    }
+
+    if (orderId) {
+      setLoading(true)
+      getOrderByNo(orderId).then((ord) => {
+        if (!active) return
+        if (ord && (!session?.email || (ord.email || '').toLowerCase() === (session.email || '').toLowerCase())) {
+          setFetchedOrder(ord)
+        }
+        setLoading(false)
+      }).catch(() => {
+        if (active) setLoading(false)
+      })
+    } else {
+      setLoading(false)
+    }
+
+    return () => { active = false }
+  }, [orderId, localOrder, session?.email])
+
+  const order = fetchedOrder || localOrder
 
   if (!session?.loggedIn) return <Navigate to="/login" replace />
+
+  if (loading) {
+    return (
+      <Wrap className="py-20 text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-3" />
+        <p className="text-sm font-semibold text-ink/70">Loading order details #{orderId}…</p>
+      </Wrap>
+    )
+  }
+
   if (!order) {
-    return <Navigate to="/account" replace />
+    return (
+      <Wrap className="py-16 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-3xl">📦</div>
+        <h1 className="text-2xl font-serif font-bold text-primary">Order Not Found</h1>
+        <p className="mt-2 text-sm text-ink/60">We could not find order #{orderId} associated with your account.</p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link to="/orders" className={btnP}>My Orders</Link>
+          <Link to="/delivery" className={btnO}>Delivery Tracking</Link>
+        </div>
+      </Wrap>
+    )
   }
 
   const items=(order.items||[]).map(item=>({...item,product:byId[item.productId]||products.find(product=>product.name===item.name)}))
