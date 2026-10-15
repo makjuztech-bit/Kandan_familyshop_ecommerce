@@ -44,35 +44,62 @@ const seed = rawProducts.map((p) => {
     `/images/products/${p.id}-3.jpg`,
     `/images/products/${p.id}-4.jpg`,
   ]
-  const validImages = Array.isArray(p.images) && p.images.length > 0
-    ? p.images
-    : defaultImages
+  const validImages = Array.isArray(p.images) && p.images.length > 0 ? p.images : defaultImages
 
   return {
     ...p,
     sku: p.sku || `KFS-${p.id.replace('kfs-', '').toUpperCase()}`,
     hex: p.hex || HEX[p.colour] || HEX['White'],
     images: validImages,
+    price: Number(p.price) || 0,
+    originalPrice: Number(p.originalPrice || p.price),
+    discount: Number(p.discount || 0),
+    stockCount: Number(p.stockCount ?? 10),
+    stock: p.stock !== false,
   }
 })
 
 const seedById = Object.fromEntries(seed.map((p) => [p.id, p]))
 
-const KEY = 'kfs_catalog_v4'
+const KEY = 'kfs_catalog_v5'
+const DELETED_KEY = 'kfs_deleted_products'
 const IK = 'kfs_site_images'
 const subs = new Set()
 const D = structuredClone(IMG)
 
-// Clear legacy cached catalogs from older versions
-if (typeof localStorage !== 'undefined') {
+function getDeletedIds() {
+  if (typeof localStorage === 'undefined') return new Set()
   try {
-    localStorage.removeItem('kfs_catalog')
-    localStorage.removeItem('kfs_catalog_v2')
-    localStorage.removeItem('kfs_catalog_v3')
+    const raw = localStorage.getItem(DELETED_KEY)
+    const arr = JSON.parse(raw || '[]')
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function markDeletedId(id) {
+  if (typeof localStorage === 'undefined' || !id) return
+  try {
+    const set = getDeletedIds()
+    set.add(id)
+    localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)))
+  } catch {}
+}
+
+function unmarkDeletedId(id) {
+  if (typeof localStorage === 'undefined' || !id) return
+  try {
+    const set = getDeletedIds()
+    if (set.has(id)) {
+      set.delete(id)
+      localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)))
+    }
   } catch {}
 }
 
 const rd = (k, d) => {
+  if (typeof localStorage === 'undefined') return d
   try {
     return JSON.parse(localStorage.getItem(k)) ?? d
   } catch {
@@ -93,46 +120,105 @@ const emit = () => {
   })
 }
 
-function sanitizeProduct(p) {
-  if (!p) return null
-  const defaultImages = seedById[p.id]?.images || [
-    `/images/products/${p.id}-1.jpg`,
-    `/images/products/${p.id}-2.jpg`,
-    `/images/products/${p.id}-3.jpg`,
-    `/images/products/${p.id}-4.jpg`,
+export function sanitizeProduct(p) {
+  if (!p || typeof p !== 'object') return null
+  const id = String(p.id || '').trim()
+  if (!id) return null
+
+  const defaultImages = seedById[id]?.images || [
+    `/images/products/${id}-1.jpg`,
+    `/images/products/${id}-2.jpg`,
+    `/images/products/${id}-3.jpg`,
+    `/images/products/${id}-4.jpg`,
   ]
 
-  let imgs = Array.isArray(p.images) ? p.images.filter(Boolean) : []
+  let imgs = []
+  if (Array.isArray(p.images)) {
+    imgs = p.images.filter((img) => typeof img === 'string' && img.trim().length > 0)
+  }
   if (imgs.length === 0) imgs = defaultImages
+
+  const price = Number(p.price) || 0
+  const originalPrice = Number(p.originalPrice || p.original_price || price)
+  const discount = Number(
+    p.discount != null
+      ? p.discount
+      : originalPrice > price
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+      : 0
+  )
+  const stockCount = Number(p.stockCount ?? p.stock_count ?? (p.stock !== false ? 10 : 0))
 
   return {
     ...p,
-    sku: p.sku || `KFS-${p.id.replace('kfs-', '').toUpperCase()}`,
+    id,
+    sku: p.sku || `KFS-${id.replace('kfs-', '').toUpperCase()}`,
+    name: String(p.name || '').trim(),
+    collection: p.collection || COLLECTIONS[0] || 'Kanchipuram Silk Sarees',
+    colour: p.colour || 'Maroon',
+    fabric: p.fabric || 'Pure Mulberry Silk',
+    zari: p.zari || 'Rich Gold Zari',
+    price,
+    originalPrice,
+    discount,
+    stock: p.stock !== false && stockCount > 0,
+    stockCount,
+    length: p.length || 'Silk Saree: 5.5 m | Blouse: 0.8 m',
+    description: p.description || '',
+    blouse: p.blouse || 'Unstitched blouse piece included.',
+    care: p.care || 'Dry clean only.',
+    best: Boolean(p.best),
+    isNew: Boolean(p.isNew ?? p.is_new),
     hex: p.hex || HEX[p.colour] || '#888888',
     images: imgs,
-    price: Number(p.price) || 0,
-    originalPrice: Number(p.originalPrice || p.price),
-    discount: Number(p.discount || 0),
-    stock: p.stock !== false,
   }
 }
 
-function load(serverProducts = null, serverSettings = null) {
-  let list = serverProducts
-  if (!list) {
-    const cached = rd(KEY, null)
-    // Accept cached list containing added/modified products
-    if (Array.isArray(cached) && cached.length > 0) {
-      list = cached
-    } else {
-      list = seed
+/**
+ * Merges updates on top of base catalog deterministically.
+ * Preserves baseline products while applying database additions and updates.
+ */
+function mergeCatalogs(baseList, incomingList) {
+  const deleted = getDeletedIds()
+  const map = new Map()
+
+  // 1. Seed with baseline products (skip deleted)
+  baseList.forEach((p) => {
+    if (p && p.id && !deleted.has(p.id)) {
+      const sanitized = sanitizeProduct(p)
+      if (sanitized) map.set(sanitized.id, sanitized)
     }
+  })
+
+  // 2. Apply incoming updates (override existing, append new)
+  if (Array.isArray(incomingList)) {
+    incomingList.forEach((p) => {
+      if (p && p.id && !deleted.has(p.id) && !p.deleted) {
+        const existing = map.get(p.id) || {}
+        const merged = sanitizeProduct({ ...existing, ...p })
+        if (merged) map.set(merged.id, merged)
+      }
+    })
   }
 
-  const sanitized = list.map(sanitizeProduct).filter(Boolean)
-  products.splice(0, products.length, ...sanitized)
+  return Array.from(map.values())
+}
+
+function load(incomingProducts = null, serverSettings = null) {
+  const cached = rd(KEY, null)
+  let base = seed
+
+  // If cached data is present, merge with seed
+  if (Array.isArray(cached) && cached.length > 0) {
+    base = mergeCatalogs(seed, cached)
+  }
+
+  // Merge incoming remote products if provided
+  const combined = incomingProducts ? mergeCatalogs(base, incomingProducts) : base
+
+  products.splice(0, products.length, ...combined)
   Object.keys(byId).forEach((k) => delete byId[k])
-  sanitized.forEach((p) => {
+  combined.forEach((p) => {
     byId[p.id] = p
   })
 
@@ -145,44 +231,49 @@ function load(serverProducts = null, serverSettings = null) {
     IMG.collections[c] = siteSettings['c:' + c] || D.collections[c]
   })
 
-  // Cache to localStorage for instant startup on next reload
+  // Cache to localStorage
   try {
-    localStorage.setItem(KEY, JSON.stringify(sanitized))
-    localStorage.setItem(IK, JSON.stringify(siteSettings))
+    localStorage.setItem(KEY, JSON.stringify(combined))
+    if (serverSettings) localStorage.setItem(IK, JSON.stringify(serverSettings))
   } catch {}
 }
 
-// Initial synchronous load from local cache or seed
+// Initial synchronous load
 load()
 
-// Asynchronous background sync with cloud database (Supabase) and local API
+// Asynchronous multi-database synchronization
 export async function syncCatalogWithServer() {
   try {
-    let prods = null
+    let fbProds = []
+    let sbProds = []
+    let apiProds = []
     let settings = null
 
-    // 0. Sync live products from Cloud Firestore if configured
+    // 0. Sync from Cloud Firestore
     if (isFirebaseConfigured() && db) {
       try {
         const snap = await getDocs(collection(db, 'products'))
         if (!snap.empty) {
-          const fbProds = []
-          snap.forEach(docSnap => {
-            fbProds.push({ ...docSnap.data(), id: docSnap.id })
+          snap.forEach((docSnap) => {
+            const data = docSnap.data()
+            if (!data.deleted) {
+              fbProds.push({ ...data, id: docSnap.id })
+            } else {
+              markDeletedId(docSnap.id)
+            }
           })
-          if (fbProds.length > 0) prods = fbProds
         }
       } catch (fbErr) {
         console.info('[Firestore catalog sync notice]:', fbErr.message)
       }
     }
 
-    // 1. Sync live products from Supabase cloud database if configured
+    // 1. Sync from Supabase cloud database
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from('products').select('*')
         if (!error && Array.isArray(data) && data.length > 0) {
-          prods = data.map((item) => ({
+          sbProds = data.map((item) => ({
             ...item,
             images: Array.isArray(item.images)
               ? item.images
@@ -196,7 +287,7 @@ export async function syncCatalogWithServer() {
       }
     }
 
-    // 2. Also try API if running local Node server
+    // 2. Sync from backend Node API if reachable
     try {
       const [prodRes, setRes] = await Promise.all([
         fetch(`${API_BASE}/api/products`),
@@ -205,7 +296,7 @@ export async function syncCatalogWithServer() {
 
       if (prodRes.ok) {
         const data = await prodRes.json().catch(() => null)
-        if (Array.isArray(data) && data.length > 0) prods = data
+        if (Array.isArray(data) && data.length > 0) apiProds = data
       }
       if (setRes.ok) {
         const setData = await setRes.json().catch(() => null)
@@ -213,37 +304,53 @@ export async function syncCatalogWithServer() {
       }
     } catch {}
 
-    if (prods || settings) {
-      load(prods, settings)
+    // Combine all incoming databases with Firestore taking highest priority
+    const combinedUpdates = [
+      ...apiProds,
+      ...sbProds,
+      ...fbProds,
+    ]
+
+    if (combinedUpdates.length > 0 || settings) {
+      load(combinedUpdates, settings)
       emit()
     }
   } catch (err) {
-    console.info('[Catalog] Running with cached/local catalog:', err.message)
+    console.info('[Catalog] Running with local/cached catalog:', err.message)
   }
 }
 
+// Real-time listener for Firestore updates
 let firestoreProductUnsub = null
 function setupFirestoreProductsListener() {
   if (firestoreProductUnsub) return
   if (!isFirebaseConfigured() || !db) return
   try {
-    firestoreProductUnsub = onSnapshot(collection(db, 'products'), (snapshot) => {
-      if (!snapshot.empty) {
-        const remoteProds = []
-        snapshot.forEach(docSnap => {
-          remoteProds.push({ ...docSnap.data(), id: docSnap.id })
-        })
-        if (remoteProds.length > 0) {
-          load(remoteProds)
-          emit()
+    firestoreProductUnsub = onSnapshot(
+      collection(db, 'products'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteProds = []
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data()
+            if (!data.deleted) {
+              remoteProds.push({ ...data, id: docSnap.id })
+            } else {
+              markDeletedId(docSnap.id)
+            }
+          })
+          if (remoteProds.length > 0) {
+            load(remoteProds)
+            emit()
+          }
         }
-      }
-    }, () => {})
+      },
+      (err) => console.info('[Firestore Products Listener Notice]:', err.message)
+    )
   } catch {}
 }
 
 if (typeof window !== 'undefined') {
-  // Trigger server sync immediately on client
   setTimeout(() => {
     syncCatalogWithServer()
     setupFirestoreProductsListener()
@@ -265,6 +372,7 @@ export const useCatalog = () =>
   )
 
 const saveLocal = (k, v) => {
+  if (typeof localStorage === 'undefined') return false
   try {
     localStorage.setItem(k, JSON.stringify(v))
     return true
@@ -275,9 +383,12 @@ const saveLocal = (k, v) => {
 
 export async function saveProduct(p) {
   const sanitized = sanitizeProduct(p)
-  if (!sanitized) throw new Error('Invalid product data.')
+  if (!sanitized) throw new Error('Invalid product data. Please check product fields.')
 
-  // If any image is base64 / dataUrl, upload to Firebase Storage or cloud store
+  // Unmark from deleted tracking if previously deleted
+  unmarkDeletedId(sanitized.id)
+
+  // 1. If any image is base64 / dataUrl, upload to storage
   const processedImages = []
   for (const img of sanitized.images) {
     if (typeof img === 'string' && img.startsWith('data:image/')) {
@@ -285,21 +396,21 @@ export async function saveProduct(p) {
         const upRes = await uploadImageToFirebase({
           file: img,
           title: sanitized.name,
-          category: 'Product Showcase',
+          category: 'Catalogue Products',
         })
         if (upRes?.url) {
           processedImages.push(upRes.url)
           continue
         }
       } catch (err) {
-        console.warn('Image upload failed, using original:', err.message)
+        console.warn('Image upload fallback, using original:', err.message)
       }
     }
     processedImages.push(img)
   }
   sanitized.images = processedImages
 
-  // 0. Save to Cloud Firestore
+  // 2. Save to Cloud Firestore (Primary Real-time Cloud Store)
   if (isFirebaseConfigured() && db) {
     try {
       await setDoc(doc(db, 'products', sanitized.id), sanitized, { merge: true })
@@ -308,27 +419,36 @@ export async function saveProduct(p) {
     }
   }
 
-  // 1. Save to Supabase cloud database if available
+  // 3. Save to Supabase Cloud Database (if connected)
   if (isSupabaseConfigured && supabase) {
     try {
-      const { error: sbError } = await supabase.from('products').upsert([
-        {
-          id: sanitized.id,
-          name: sanitized.name.trim(),
-          collection: sanitized.collection || 'Kanchipuram Silk Sarees',
-          colour: sanitized.colour || 'Maroon',
-          fabric: sanitized.fabric || '',
-          zari: sanitized.zari || '',
-          price: sanitized.price,
-          stock: Boolean(sanitized.stock),
-          hex: sanitized.hex,
-          images: sanitized.images,
-          blouse: sanitized.blouse || '',
-          care: sanitized.care || '',
-          best: Boolean(sanitized.best),
-          is_new: Boolean(sanitized.is_new),
-        },
-      ])
+      const { error: sbError } = await supabase.from('products').upsert(
+        [
+          {
+            id: sanitized.id,
+            sku: sanitized.sku || '',
+            name: sanitized.name.trim(),
+            collection: sanitized.collection || 'Kanchipuram Silk Sarees',
+            colour: sanitized.colour || 'Maroon',
+            fabric: sanitized.fabric || '',
+            zari: sanitized.zari || '',
+            price: sanitized.price,
+            original_price: sanitized.originalPrice || sanitized.price,
+            discount: sanitized.discount || 0,
+            stock: Boolean(sanitized.stock),
+            stock_count: sanitized.stockCount ?? 10,
+            length: sanitized.length || 'Silk Saree: 5.5 m | Blouse: 0.8 m',
+            description: sanitized.description || '',
+            hex: sanitized.hex,
+            images: sanitized.images,
+            blouse: sanitized.blouse || '',
+            care: sanitized.care || '',
+            best: Boolean(sanitized.best),
+            is_new: Boolean(sanitized.isNew),
+          },
+        ],
+        { onConflict: 'id' }
+      )
       if (sbError) {
         console.warn('[Supabase saveProduct warning]:', sbError.message)
       }
@@ -337,7 +457,7 @@ export async function saveProduct(p) {
     }
   }
 
-  // 2. Also try local backend API if available
+  // 4. Save to backend Node / SQLite server (if running)
   try {
     const headers = getAdminAuthHeaders()
     await fetch(`${API_BASE}/api/products`, {
@@ -347,9 +467,14 @@ export async function saveProduct(p) {
     })
   } catch {}
 
-  // Update in-memory catalogue and local cache
-  const i = products.findIndex((x) => x.id === savedProductLocal(sanitized).id)
-  const next = i < 0 ? [sanitized, ...products] : products.map((x) => (x.id === sanitized.id ? sanitized : x))
+  // 5. Update in-memory catalogue and local cache immediately
+  const existingIdx = products.findIndex((x) => x.id === sanitized.id)
+  let next = []
+  if (existingIdx >= 0) {
+    next = products.map((x) => (x.id === sanitized.id ? sanitized : x))
+  } else {
+    next = [sanitized, ...products]
+  }
   products.splice(0, products.length, ...next)
   byId[sanitized.id] = sanitized
   saveLocal(KEY, next)
@@ -358,23 +483,23 @@ export async function saveProduct(p) {
   return sanitized
 }
 
-function savedProductLocal(p) {
-  return p
-}
-
 export async function deleteProduct(id) {
   if (!id) return
 
-  // 0. Delete from Cloud Firestore
+  // 1. Mark in deleted tracking set
+  markDeletedId(id)
+
+  // 2. Delete from Cloud Firestore
   if (isFirebaseConfigured() && db) {
     try {
+      await setDoc(doc(db, 'products', id), { deleted: true }, { merge: true })
       await deleteDoc(doc(db, 'products', id))
     } catch (fbErr) {
       console.warn('[Firestore deleteProduct notice]:', fbErr.message)
     }
   }
 
-  // 1. Delete from Supabase if connected
+  // 3. Delete from Supabase
   if (isSupabaseConfigured && supabase) {
     try {
       await supabase.from('products').delete().eq('id', id)
@@ -383,15 +508,16 @@ export async function deleteProduct(id) {
     }
   }
 
-  // 2. Delete from local backend if running
+  // 4. Delete from local backend API
   try {
     const headers = getAdminAuthHeaders()
-    await fetch(`${API_BASE}/api/products/${id}`, {
+    await fetch(`${API_BASE}/api/products/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       headers,
     })
   } catch {}
 
+  // 5. Remove from in-memory catalogue and local cache
   const next = products.filter((p) => p.id !== id)
   products.splice(0, products.length, ...next)
   delete byId[id]
@@ -436,8 +562,11 @@ export async function setSiteImage(k, v) {
 }
 
 export async function resetCatalog() {
-  localStorage.removeItem(KEY)
-  localStorage.removeItem(IK)
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(KEY)
+    localStorage.removeItem(DELETED_KEY)
+    localStorage.removeItem(IK)
+  }
 
   try {
     await fetch(`${API_BASE}/api/products/reset`, { method: 'POST', headers: getAdminAuthHeaders() })

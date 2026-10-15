@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useParams } from 'react-router-dom'
 import { products, useCatalog, inr } from '../data/products'
 import { Wrap, Grid, btnP, btnO } from '../components/ui'
 
@@ -8,16 +8,24 @@ const lab = 'mb-1 block text-sm font-bold'
 
 export function CategoryPage() {
   useCatalog()
+  const { category } = useParams()
+  const decoded = category ? decodeURIComponent(category) : ''
+  const items = decoded
+    ? products.filter((p) => (p.collection || '').toLowerCase() === decoded.toLowerCase() || (p.collection || '').toLowerCase().includes(decoded.toLowerCase()))
+    : products
+
   return (
     <Wrap className="py-10">
       <div className="mb-8 flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-primary">All Products</h1>
-          <p className="mt-1 text-sm text-ink/70">Explore our authentic textile catalogue</p>
+          <h1 className="text-4xl font-serif font-bold text-primary">{decoded || 'All Products'}</h1>
+          <p className="mt-1 text-sm text-ink/70">
+            {decoded ? `${items.length} designs available in ${decoded}` : 'Explore our authentic textile catalogue'}
+          </p>
         </div>
         <Link to="/shop" className={btnO}>Browse all</Link>
       </div>
-      <Grid items={products} />
+      <Grid items={items} />
     </Wrap>
   )
 }
@@ -28,15 +36,16 @@ export default function Shop() {
   const [drawer, setDrawer] = useState(false)
   const g = (k) => sp.get(k) || ''
 
+  const highestPrice = Math.max(10000, ...products.map((p) => p.price || 0))
   const f = {
     q: g('q'),
-    max: +g('max') || 5000,
+    max: +g('max') || highestPrice,
     sort: g('sort') || 'name',
   }
 
   const set = (k, v) => {
     const n = new URLSearchParams(sp)
-    if (v === '' || v === false || (k === 'max' && +v >= 5000)) {
+    if (v === '' || v === false || (k === 'max' && +v >= highestPrice)) {
       n.delete(k)
     } else {
       n.set(k, v === true ? '1' : v)
@@ -45,7 +54,7 @@ export default function Shop() {
   }
 
   const list = products
-    .filter((p) => (!f.q || p.name.toLowerCase().includes(f.q.toLowerCase())) && p.price <= f.max)
+    .filter((p) => (!f.q || p.name.toLowerCase().includes(f.q.toLowerCase())) && (!g('max') || p.price <= f.max))
     .sort((a, b) => (f.sort === 'low' ? a.price - b.price : f.sort === 'high' ? b.price - a.price : a.name.localeCompare(b.name)))
 
   const Filters = ({ x }) => (
@@ -69,15 +78,15 @@ export default function Shop() {
           id={x + 'p'}
           type="range"
           min="200"
-          max="3000"
-          step="25"
-          value={f.max > 3000 ? 3000 : f.max}
+          max={highestPrice}
+          step="50"
+          value={f.max > highestPrice ? highestPrice : f.max}
           onChange={(e) => set('max', e.target.value)}
           className="h-11 w-full accent-primary"
         />
         <div className="mt-1 flex justify-between text-xs text-ink/60">
           <span>₹200</span>
-          <span>₹3,000</span>
+          <span>{inr(highestPrice)}</span>
         </div>
       </div>
       <button className={btnO + ' w-full'} onClick={() => setSp({})}>

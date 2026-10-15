@@ -159,9 +159,9 @@ const blank = () => ({
   sku: 'KFS-NEW-' + Math.floor(100 + Math.random() * 900),
   name: '',
   collection: COLLECTIONS[0],
-  colour: 'primary',
-  fabric: '',
-  zari: '',
+  colour: 'Maroon',
+  fabric: 'Pure Mulberry Silk',
+  zari: 'Rich Gold Zari',
   price: 5000,
   originalPrice: 6500,
   stockCount: 10,
@@ -338,7 +338,7 @@ function Form({ init, onDone }) {
                 onChange={async (v) => {
                   const nextImgs = p.images.map((x, j) => (j === i ? v : x))
                   set('images', nextImgs)
-                  if (init?.id && !init.id.startsWith('new_')) {
+                  if (init?.id && !init.id.startsWith('new_') && p.name && p.name.trim().length >= 2) {
                     try {
                       await saveProduct({ ...p, images: nextImgs.filter(Boolean) })
                       setSavedLiveMsg('Photo updated and stored in live automatic!')
