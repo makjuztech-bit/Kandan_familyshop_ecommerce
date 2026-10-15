@@ -176,11 +176,35 @@ export async function uploadImageToFirebase({
         )
       })
     } catch (err) {
-      console.info('[Firebase Storage Notice]: Storage upload unavailable, persisting to Cloud Firestore:', err.message)
+      console.info('[Firebase Storage Notice]: Storage upload unavailable, trying cloud database fallback:', err.message)
     }
   }
 
-  // 5. Final public image URL: Firebase Storage URL or optimized Data URL
+  // 5. If Firebase Storage was unavailable, attempt Supabase Storage upload via API
+  if (!downloadUrl && typeof window !== 'undefined') {
+    try {
+      const apiRes = await fetch(`${API_BASE}/api/upload`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({
+          file: optimized.dataUrl,
+          filename: sanitizedName,
+          folder: category.toLowerCase().replace(/\s+/g, '-'),
+        }),
+      })
+      if (apiRes.ok) {
+        const apiData = await apiRes.json()
+        if (apiData?.url) {
+          downloadUrl = apiData.url
+          storagePath = apiData.path || null
+        }
+      }
+    } catch {
+      // Offline / standalone mode
+    }
+  }
+
+  // 6. Final public image URL: Cloud Storage URL or optimized Data URL
   const finalUrl = downloadUrl || optimized.dataUrl
 
   // 6. Record metadata in Cloud Firestore 'website_images'
@@ -390,6 +414,9 @@ export function applyImageToStore(sectionKey, imageUrl) {
       break
     case 'about':
       IMG.about = imageUrl
+      break
+    case 'family':
+      IMG.family = imageUrl
       break
     case 'bridal':
       IMG.collections['Bridal Collection'] = imageUrl

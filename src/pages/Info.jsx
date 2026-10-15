@@ -3,8 +3,17 @@ import {Link,useParams} from 'react-router-dom'
 import {SHOP,IMG} from '../config/shop'
 import {Img,Wrap,Field,validate,btnP,WhatsApp} from '../components/ui'
 import {createGmailDraftUrl} from '../data/email'
-export const About=()=><Wrap className="grid max-w-5xl items-center gap-8 py-12 md:grid-cols-2"><div><h1 className="text-4xl">About Sri Kandan Family Shop</h1><p className="mt-4 text-ink/80">We are a silk saree boutique focused on helping you choose the right silk saree for weddings, festivals and everyday wear. Our team gives personal guidance on colour, weave, zari and budget.</p><p className="mt-3 text-ink/80">We are committed to bringing you the finest silk sarees, with personal service and quality you can trust.</p><Link to="/contact" className={btnP+' mt-5'}>Talk to us</Link></div><div className="aspect-[4/5] overflow-hidden bg-ivory-dark"><Img src={IMG.about} alt="Draping a silk saree" className="h-full w-full object-cover"/></div></Wrap>
+import {useFirebaseImages} from '../hooks/useFirebaseImages'
+
+export const About=()=>{
+  const activeImages = useFirebaseImages()
+  const aboutImage = activeImages.about || IMG.about
+  return <Wrap className="grid max-w-5xl items-center gap-8 py-12 md:grid-cols-2"><div><h1 className="text-4xl">About Sri Kandan Family Shop</h1><p className="mt-4 text-ink/80">We are a silk saree boutique focused on helping you choose the right silk saree for weddings, festivals and everyday wear. Our team gives personal guidance on colour, weave, zari and budget.</p><p className="mt-3 text-ink/80">We are committed to bringing you the finest silk sarees, with personal service and quality you can trust.</p><Link to="/contact" className={btnP+' mt-5'}>Talk to us</Link></div><div className="aspect-[4/5] overflow-hidden bg-ivory-dark"><Img src={aboutImage} alt="Draping a silk saree" className="h-full w-full object-cover"/></div></Wrap>
+}
+
 export function Contact() {
+  const activeImages = useFirebaseImages()
+  const familyImage = activeImages.family || IMG.family || '/images/kandan-family.jpg?v=2'
   const [v, setV] = useState({})
   const [err, setErr] = useState({})
   const [draftUrl, setDraftUrl] = useState(null)
@@ -42,7 +51,7 @@ export function Contact() {
           <div className="overflow-hidden rounded-2xl border-2 border-gold/40 bg-white shadow-md">
             <div className="aspect-[4/3] sm:aspect-[16/11] overflow-hidden bg-ivory-dark">
               <img
-                src="/images/kandan-family.jpg?v=2"
+                src={familyImage}
                 alt="Sri Kandan Family Shop Founders"
                 className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
               />

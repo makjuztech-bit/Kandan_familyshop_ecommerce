@@ -2,16 +2,23 @@ import { Link } from 'react-router-dom'
 import { products, useCatalog } from '../data/products'
 import { IMG, SHOP } from '../config/shop'
 import { useBackgroundImage } from '../data/background'
+import { useFirebaseImages } from '../hooks/useFirebaseImages'
 import { Img, Wrap, Title, Grid, btnP, btnG, btnO, WhatsApp } from '../components/ui'
 
 export default function Home() {
   useCatalog()
+  const activeImages = useFirebaseImages()
   const backgroundImage = useBackgroundImage()
+
+  const heroImage = activeImages.hero || backgroundImage || IMG.hero
+  const bannerImage = activeImages.banner || IMG.banner
+  const aboutImage = activeImages.about || IMG.about
+  const familyImage = activeImages.family || IMG.family || '/images/kandan-family.jpg?v=2'
 
   return (
     <>
       <section className="relative isolate flex min-h-[75vh] items-center overflow-hidden bg-primary-dark">
-        <Img src={backgroundImage} alt="Textiles in a showroom" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+        <Img src={heroImage} alt="Textiles in a showroom" className="absolute inset-0 -z-20 h-full w-full object-cover" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/55 to-black/25" />
         <Wrap className="py-20 text-ivory">
           <p className="mb-3 text-gold tracking-widest uppercase text-xs sm:text-sm font-semibold">Tradition, Beautifully Woven</p>
@@ -47,7 +54,7 @@ export default function Home() {
 
       {/* Mid Banner */}
       <section className="relative isolate mt-20 overflow-hidden bg-primary-dark py-24 text-center">
-        <Img src={IMG.banner} alt="Traditional weave with rich border" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+        <Img src={bannerImage} alt="Traditional weave with rich border" className="absolute inset-0 -z-20 h-full w-full object-cover" />
         <div className="absolute inset-0 -z-10 bg-black/60" />
         <Wrap>
           <h2 className="mx-auto max-w-2xl font-serif text-3xl text-ivory sm:text-5xl">
@@ -78,7 +85,7 @@ export default function Home() {
       {/* About the Shop */}
       <Wrap className="grid items-center gap-8 pt-20 md:grid-cols-2">
         <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-ivory-dark border border-gold/40 shadow-md">
-          <Img src={IMG.about} alt="Draping a traditional textile saree" className="h-full w-full object-cover" />
+          <Img src={aboutImage} alt="Draping a traditional textile saree" className="h-full w-full object-cover" />
         </div>
         <div>
           <h2 className="text-3xl font-serif text-primary">Textiles chosen with personal care</h2>
@@ -98,7 +105,7 @@ export default function Home() {
             <div className="lg:col-span-5 overflow-hidden rounded-xl border-2 border-gold/40 shadow-md">
               <div className="aspect-[4/3] overflow-hidden bg-ivory-dark">
                 <img
-                  src="/images/kandan-family.jpg?v=2"
+                  src={familyImage}
                   alt="Sri Kandan Family Shop Founders"
                   className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
                 />
