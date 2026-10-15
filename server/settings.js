@@ -15,8 +15,8 @@ database.exec(`
 `)
 
 export const DEFAULT_SETTINGS = {
-  hero: '/images/hero-silk-showroom.jpg',
-  background: '/images/hero-silk-showroom.jpg',
+  hero: '/images/hero-silk-showroom.jpg?v=2',
+  background: '/images/hero-silk-showroom.jpg?v=2',
   banner: '/images/bridal-banner.jpg',
   about: '/images/about-draping.jpg',
   'c:Bridal Collection': '/images/collections/bridal.jpg',

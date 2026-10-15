@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { IMG, API_BASE, getAdminAuthHeaders } from '../config/shop'
 
-export const DEFAULT_BACKGROUND = '/images/hero-silk-showroom.jpg'
+export const DEFAULT_BACKGROUND = '/images/hero-silk-showroom.jpg?v=2'
 const STORAGE_KEY = 'kfs_website_background'
 const DB_NAME = 'kfs_assets_db'
 const DB_STORE = 'settings'

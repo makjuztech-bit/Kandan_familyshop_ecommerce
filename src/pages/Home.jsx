@@ -18,7 +18,7 @@ export default function Home() {
   return (
     <>
       <section className="relative isolate flex min-h-[75vh] items-center overflow-hidden bg-primary-dark">
-        <Img src={heroImage} alt="Textiles in a showroom" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+        <Img src={heroImage} alt="Sri Kandan Family Shop Showroom" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_35%] md:object-[center_30%]" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/55 to-black/25" />
         <Wrap className="py-20 text-ivory">
           <p className="mb-3 text-gold tracking-widest uppercase text-xs sm:text-sm font-semibold">Tradition, Beautifully Woven</p>

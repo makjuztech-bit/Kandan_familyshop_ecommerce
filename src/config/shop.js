@@ -5,7 +5,7 @@ export const SHOP={name:'Sri Kandan Family Shop',
  social:{Instagram:'',Facebook:'',YouTube:''},mapUrl:'',
  razorpayUrl:'https://razorpay.me/@srikandanfamilyshop',
  razorpayHandle:'@srikandanfamilyshop'}
-export const IMG={hero:'/images/hero-silk-showroom.jpg',banner:'/images/bridal-banner.jpg',about:'/images/about-draping.jpg',family:'/images/kandan-family.jpg?v=2',
+export const IMG={hero:'/images/hero-silk-showroom.jpg?v=2',banner:'/images/bridal-banner.jpg',about:'/images/about-draping.jpg',family:'/images/kandan-family.jpg?v=2',
  collections:{'Bridal Collection':'/images/collections/bridal.jpg','Soft Silk':'/images/collections/soft-silk.jpg','Shirts':'/images/collections/shirts.jpg','Tops':'/images/collections/tops.jpg','Pants':'/images/collections/pants.jpg'}}
 export const ADMIN_PASSWORD='admin123'
 export const API_BASE=''
