@@ -62,11 +62,33 @@ function normalizeOrder(order) {
   let items = []
   if (Array.isArray(order.items)) {
     items = order.items
+  } else if (typeof order.items === 'string') {
+    try { items = JSON.parse(order.items) } catch { items = [] }
+  } else if (Array.isArray(order.items_json)) {
+    items = order.items_json
   } else if (typeof order.items_json === 'string') {
     try { items = JSON.parse(order.items_json) } catch { items = [] }
-  } else if (order.items_json && Array.isArray(order.items_json)) {
-    items = order.items_json
   }
+
+  if (!Array.isArray(items)) {
+    items = []
+  }
+
+  // Sanitize each item to ensure no undefined crashes
+  items = items.map(item => {
+    if (typeof item === 'string') {
+      return { name: item, q: 1, price: 0, image: '', sku: '' }
+    }
+    return {
+      name: item?.name || item?.title || 'Silk Saree',
+      q: Number(item?.q || item?.quantity || 1),
+      price: Number(item?.price || 0),
+      image: item?.image || '',
+      productId: item?.productId || item?.id || '',
+      sku: item?.sku || '',
+      category: item?.category || '',
+    }
+  })
 
   const paymentMethod = order.paymentMethod || order.payment_method || 'COD'
   const isOnlinePayment = paymentMethod.toLowerCase().includes('razorpay') || paymentMethod.toLowerCase().includes('online') || paymentMethod.toLowerCase().includes('card') || paymentMethod.toLowerCase().includes('upi')
@@ -414,19 +436,43 @@ export async function loadOrders(force = false) {
     }
   }
 
-  // 3. Fallback to Express backend if running
+  // 3. Admin fetch from Express backend if admin authenticated
+  let adminFetchSuccess = false
   try {
-    const res = await fetch(`${API_BASE}/api/orders`, {
-      headers: getAdminAuthHeaders()
-    })
-    if (res.ok) {
-      const data = await res.json().catch(() => null)
-      if (Array.isArray(data) && data.length > 0) {
-        const apiOrders = data.map(normalizeOrder).filter(Boolean)
-        fetchedOrders = [...fetchedOrders, ...apiOrders]
+    const adminHeaders = getAdminAuthHeaders()
+    if (adminHeaders.Authorization) {
+      const res = await fetch(`${API_BASE}/api/orders`, {
+        headers: adminHeaders
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => null)
+        if (Array.isArray(data) && data.length > 0) {
+          const apiOrders = data.map(normalizeOrder).filter(Boolean)
+          fetchedOrders = [...fetchedOrders, ...apiOrders]
+          adminFetchSuccess = true
+        }
       }
     }
   } catch {}
+
+  // 4. If not admin or admin fetch yielded nothing, fetch customer orders if user is logged in
+  if (!adminFetchSuccess && typeof window !== 'undefined') {
+    try {
+      const sessionRaw = window.localStorage.getItem('kfs_demo_session')
+      const userRaw = window.localStorage.getItem('kfs_demo_user')
+      const sess = sessionRaw ? JSON.parse(sessionRaw) : null
+      const usr = userRaw ? JSON.parse(userRaw) : null
+      const email = sess?.email || usr?.email || ''
+      const phone = sess?.phone || usr?.phone || ''
+
+      if (email || phone) {
+        const custOrders = await fetchCustomerOrders({ email, phone })
+        if (Array.isArray(custOrders) && custOrders.length > 0) {
+          fetchedOrders = [...fetchedOrders, ...custOrders]
+        }
+      }
+    } catch {}
+  }
 
   // Deduplicate by order `no`
   if (fetchedOrders.length > 0) {
@@ -450,4 +496,44 @@ export async function loadOrders(force = false) {
   }
 
   return list
+}
+
+// Public API for customers to look up orders by email, phone, or order ID
+export async function fetchCustomerOrders({ email = '', phone = '', no = '' } = {}) {
+  let matchedOrders = []
+  const params = new URLSearchParams()
+  if (email) params.set('email', email)
+  if (phone) params.set('phone', phone)
+  if (no) params.set('no', no)
+
+  try {
+    const res = await fetch(`${API_BASE}/api/customer/orders?${params.toString()}`)
+    if (res.ok) {
+      const data = await res.json().catch(() => null)
+      if (Array.isArray(data) && data.length > 0) {
+        matchedOrders = data.map(normalizeOrder).filter(Boolean)
+      }
+    }
+  } catch (err) {
+    console.warn('Customer orders fetch notice:', err.message)
+  }
+
+  if (matchedOrders.length > 0) {
+    const map = new Map()
+    matchedOrders.forEach(o => {
+      if (o && o.no) map.set(o.no, o)
+    })
+    list.forEach(o => {
+      if (o && o.no && !map.has(o.no)) map.set(o.no, o)
+    })
+
+    list = Array.from(map.values()).sort((a, b) => {
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+    })
+
+    saveCache(list)
+    emit()
+  }
+
+  return matchedOrders
 }

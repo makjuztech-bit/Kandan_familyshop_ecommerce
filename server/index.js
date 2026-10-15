@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerReviewRoutes } from './reviews.js'
 import { registerLoyaltyRoutes } from './loyalty.js'
-import { saveOrderToDatabase, getAllOrders, getOrderByNo, updateOrderInDatabase, deleteOrderFromDatabase, sendOrderConfirmationEmail, sendOrderWhatsAppNotification } from './orders.js'
+import { saveOrderToDatabase, getAllOrders, getOrderByNo, getCustomerOrders, updateOrderInDatabase, deleteOrderFromDatabase, sendOrderConfirmationEmail, sendOrderWhatsAppNotification } from './orders.js'
 import { registerRazorpayRoutes } from './razorpay.js'
 import { uploadImage, parseDataUrl, deleteImage } from './uploads.js'
 import { getAllProducts, getProductById, saveProductToDatabase, deleteProductFromDatabase, resetProductsToSeed } from './products.js'
@@ -235,6 +235,18 @@ app.get('/api/orders', requireAdminAuth, (req, res) => {
   }
 })
 
+// Public Customer Orders Lookup API
+app.get('/api/customer/orders', (req, res) => {
+  try {
+    const { email, phone, no } = req.query || {}
+    const orders = getCustomerOrders({ email, phone, no })
+    res.json(orders)
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to fetch customer orders' })
+  }
+})
+
+// Single Order Lookup (public - by Order No)
 app.get('/api/orders/:no', (req, res) => {
   try {
     const order = getOrderByNo(req.params.no)

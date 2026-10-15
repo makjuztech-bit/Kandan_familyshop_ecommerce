@@ -404,7 +404,18 @@ function Form({ init, onDone }) {
 const NAV=[['dash','Dashboard'],['products','Products'],['orders','Orders'],['delivery','Delivery'],['loyalty','⭐ Loyalty Rewards'],['sales','Sales analytics'],['reviews','Reviews'],['site','Site images']]
 const STATUS=['Confirmed','New','Processing','Packed','Delivered','Cancelled','Refunded'],PAYMENTS=['Pending','Paid','Failed','COD','unpaid','paid'],BADGE={Confirmed:'bg-emerald-100 text-emerald-800',New:'bg-gold/30 text-gold-dark',Processing:'bg-blue-100 text-blue-800',Packed:'bg-blue-100 text-blue-800',Delivered:'bg-emerald/15 text-emerald',Cancelled:'bg-red-100 text-red-800',Refunded:'bg-red-100 text-red-800'}
 const DELIVERY_STATUS_COLOR={Confirmed:'bg-emerald-100 text-emerald-800',New:'bg-amber-100 text-amber-800',Processing:'bg-blue-100 text-blue-800',Packed:'bg-blue-100 text-blue-800',Delivered:'bg-emerald-100 text-emerald-800',Cancelled:'bg-red-100 text-red-700',Refunded:'bg-red-100 text-red-700'}
-const lines=o=>(o.items||[]).map(i=>typeof i==='string'?i:`${i.name} × ${i.q}`)
+const lines = o => {
+  let arr = []
+  if (Array.isArray(o?.items)) arr = o.items
+  else if (typeof o?.items === 'string') {
+    try { arr = JSON.parse(o.items) } catch { arr = [] }
+  } else if (Array.isArray(o?.items_json)) arr = o.items_json
+  else if (typeof o?.items_json === 'string') {
+    try { arr = JSON.parse(o.items_json) } catch { arr = [] }
+  }
+  if (!Array.isArray(arr)) arr = []
+  return arr.map(i => typeof i === 'string' ? i : `${i?.name || 'Saree'} × ${i?.q || 1}`)
+}
 const Stat=({t,v,onClick,icon})=><div onClick={onClick} className={'border border-gold/40 bg-white p-4 shadow-sm'+(onClick?' cursor-pointer hover:border-primary/60 hover:shadow-md transition-all group':'')}><p className="text-sm text-ink/70 flex items-center gap-2">{icon&&<span>{icon}</span>}{t}</p><p className="mt-1 font-sans text-3xl font-extrabold text-primary tabular-nums lining-nums">{v}</p>{onClick&&<p className="mt-2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Click to view →</p>}</div>
 const Badge=({s})=><span className={'rounded-full px-2.5 py-0.5 text-xs font-bold '+(BADGE[s||'New'])}>{s||'New'}</span>
 function Orders({orders,limit}){const list=limit?orders.slice(0,limit):orders

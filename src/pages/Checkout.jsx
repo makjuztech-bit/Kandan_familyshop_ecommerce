@@ -18,6 +18,18 @@ export default function Checkout() {
     phone: session?.phone || '',
     address: session?.address || '',
   })
+
+  // Synchronize form when customer logs in
+  useEffect(() => {
+    if (session?.loggedIn) {
+      setV((prev) => ({
+        name: prev.name || session.name || '',
+        email: prev.email || session.email || '',
+        phone: prev.phone || session.phone || '',
+        address: prev.address || session.address || '',
+      }))
+    }
+  }, [session])
   const [err, setErr] = useState({})
   const [order, setOrder] = useState(null)
   const [pendingOrder, setPendingOrder] = useState(null)
@@ -551,6 +563,21 @@ export default function Checkout() {
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_350px]">
         <form onSubmit={submit} noValidate className="space-y-8">
           <div className="space-y-4">
+            {!session?.loggedIn && (
+              <div className="rounded-xl border border-gold/40 bg-ivory/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✨</span>
+                  <div>
+                    <p className="font-bold text-sm text-primary">Already have an account?</p>
+                    <p className="text-xs text-ink/70">Sign in to use your saved addresses and earn loyalty rewards.</p>
+                  </div>
+                </div>
+                <Link to="/login?redirect=/checkout" className={btnP + ' text-xs px-4 py-2 shrink-0 text-center'}>
+                  Sign In with OTP / Password
+                </Link>
+              </div>
+            )}
+
             <h2 className="text-2xl font-serif text-primary border-b border-gold/30 pb-2">
               1. Delivery Details
             </h2>

@@ -157,15 +157,79 @@ export function registerReviewRoutes(app){
   return res.json({items:rows.map(withPhotoUrl),page,limit,total,pages:Math.ceil(total/limit),summary:getSummary(productId||undefined)})
  })
 
- app.post('/api/reviews',reviewLimiter,(req,res)=>{
-  const error=validateReview(req.body)
-  if(error)return res.status(400).json({error})
-  const image=imageFromDataUrl(req.body.photo)
-  if(image.error)return res.status(400).json({error:image.error})
-  const id=randomUUID(),createdAt=new Date().toISOString()
-  database.prepare(`INSERT INTO reviews(id,product_id,name,email,rating,title,description,photo,photo_type,created_at)
-   VALUES(?,?,?,?,?,?,?,?,?,?)`).run(id,req.body.productId,req.body.name.trim(),req.body.email.trim().toLowerCase(),req.body.rating,req.body.title.trim(),req.body.description.trim(),image.photo,image.type,createdAt)
-  return res.status(201).json({ok:true,message:'Thanks for your review. It will appear after moderation.'})
+ app.get('/api/customer/reviews', (req, res) => {
+  const email = (req.query.email || '').trim().toLowerCase()
+  if (!email) return res.json({ items: [] })
+  try {
+    const rows = database.prepare(`SELECT ${publicFields}, status FROM reviews WHERE LOWER(email) = ? ORDER BY created_at DESC`).all(email)
+    return res.json({ items: rows.map(withPhotoUrl) })
+  } catch {
+    return res.json({ items: [] })
+  }
+ })
+
+ app.post('/api/reviews', reviewLimiter, (req, res) => {
+  const error = validateReview(req.body)
+  if (error) return res.status(400).json({ error })
+
+  const cleanEmail = req.body.email.trim().toLowerCase()
+  const cleanProductId = req.body.productId.trim()
+
+  // 1. Prevent duplicate reviews by same customer on same product
+  const existing = database.prepare('SELECT id FROM reviews WHERE product_id = ? AND LOWER(email) = ? LIMIT 1').get(cleanProductId, cleanEmail)
+  if (existing) {
+    return res.status(409).json({ error: 'You have already submitted a review for this product.' })
+  }
+
+  // 2. Check for verified purchase in orders table
+  let verified = 0
+  let initialStatus = 'pending'
+  try {
+    const orderMatch = database.prepare(`
+      SELECT id FROM orders
+      WHERE LOWER(email) = ?
+        AND items_json LIKE ?
+        AND (payment_status = 'Paid' OR order_status IN ('Confirmed', 'Processing', 'Packed', 'Shipped', 'Delivered'))
+      LIMIT 1
+    `).get(cleanEmail, `%"productId":"${cleanProductId}"%`)
+
+    if (orderMatch) {
+      verified = 1
+      initialStatus = 'approved' // Automatically publish verified buyer reviews
+    }
+  } catch (orderCheckErr) {
+    console.warn('[Review Verified Purchase Check Notice]:', orderCheckErr.message)
+  }
+
+  const image = imageFromDataUrl(req.body.photo)
+  if (image.error) return res.status(400).json({ error: image.error })
+  const id = randomUUID()
+  const createdAt = new Date().toISOString()
+
+  database.prepare(`INSERT INTO reviews(id, product_id, name, email, rating, title, description, photo, photo_type, created_at, verified, status)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id,
+    cleanProductId,
+    req.body.name.trim(),
+    cleanEmail,
+    req.body.rating,
+    req.body.title.trim(),
+    req.body.description.trim(),
+    image.photo,
+    image.type,
+    createdAt,
+    verified,
+    initialStatus
+  )
+
+  return res.status(201).json({
+    ok: true,
+    verified: Boolean(verified),
+    status: initialStatus,
+    message: verified
+      ? 'Verified purchase confirmed! Your review and rating have been published.'
+      : 'Thanks for your review. It will appear after moderation.',
+  })
  })
 
  app.post('/api/reviews/:id/helpful',actionLimiter,(req,res)=>{

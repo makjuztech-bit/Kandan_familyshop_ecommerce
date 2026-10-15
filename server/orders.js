@@ -117,10 +117,34 @@ function formatRow(row) {
   if (!row) return null
   let items = []
   try {
-    items = JSON.parse(row.items_json)
+    if (Array.isArray(row.items_json)) {
+      items = row.items_json
+    } else if (typeof row.items_json === 'string') {
+      items = JSON.parse(row.items_json)
+    }
   } catch {
     items = []
   }
+
+  if (!Array.isArray(items)) {
+    items = []
+  }
+
+  // Ensure every item is a robust object
+  items = items.map(item => {
+    if (typeof item === 'string') {
+      return { name: item, q: 1, price: 0, image: '', sku: '' }
+    }
+    return {
+      name: item?.name || item?.title || 'Handloom Silk Saree',
+      q: Number(item?.q || item?.quantity || 1),
+      price: Number(item?.price || 0),
+      image: item?.image || '',
+      productId: item?.productId || item?.id || '',
+      sku: item?.sku || '',
+      category: item?.category || '',
+    }
+  })
 
   const fullAddress = [row.address, row.city, row.pincode].filter(Boolean).join(', ')
 
@@ -203,17 +227,24 @@ export function saveOrderToDatabase(orderData) {
   const paymentId = (orderData.paymentId || '').trim()
   const razorpayOrderId = (orderData.razorpayOrderId || '').trim()
 
+  const custName = (orderData.name || orderData.customer_name || orderData.customerName || 'Valued Customer').trim()
+  const custEmail = (orderData.email || '').trim()
+  const custPhone = (orderData.phone || '').trim()
+  const custAddress = (orderData.address || '').trim()
+  const custCity = (orderData.city || '').trim()
+  const custPincode = (orderData.pincode || '').trim()
+
   // 1. Insert order record initially into SQLite database
   try {
     insertStmt.run(
       id,
       no,
-      orderData.name.trim(),
-      orderData.email.trim(),
-      orderData.phone.trim(),
-      orderData.address.trim(),
-      (orderData.city || '').trim(),
-      (orderData.pincode || '').trim(),
+      custName,
+      custEmail,
+      custPhone,
+      custAddress,
+      custCity,
+      custPincode,
       subtotal,
       discount,
       shipping,
@@ -311,10 +342,10 @@ export function saveOrderToDatabase(orderData) {
       .insert([
         {
           no,
-          name: orderData.name.trim(),
-          email: orderData.email.trim(),
-          phone: orderData.phone.trim(),
-          address: [orderData.address, orderData.city, orderData.pincode].filter(Boolean).join(', '),
+          name: custName,
+          email: custEmail,
+          phone: custPhone,
+          address: [custAddress, custCity, custPincode].filter(Boolean).join(', '),
           total,
           status: orderStatus,
           payment_status: paymentStatus,
@@ -333,12 +364,12 @@ export function saveOrderToDatabase(orderData) {
   return formatRow({
     id,
     no,
-    customer_name: orderData.name.trim(),
-    email: orderData.email.trim(),
-    phone: orderData.phone.trim(),
-    address: orderData.address.trim(),
-    city: (orderData.city || '').trim(),
-    pincode: (orderData.pincode || '').trim(),
+    customer_name: custName,
+    email: custEmail,
+    phone: custPhone,
+    address: custAddress,
+    city: custCity,
+    pincode: custPincode,
     subtotal,
     discount,
     shipping,
@@ -367,8 +398,35 @@ export function getAllOrders() {
 }
 
 export function getOrderByNo(no) {
-  const row = selectByNoStmt.get(no)
+  if (!no) return null
+  const trimmed = String(no).trim()
+  let row = selectByNoStmt.get(trimmed)
+  if (!row) {
+    try {
+      const altStmt = database.prepare(`SELECT * FROM orders WHERE LOWER(TRIM(no)) = LOWER(TRIM(?)) LIMIT 1`)
+      row = altStmt.get(trimmed)
+    } catch {}
+  }
   return formatRow(row)
+}
+
+export function getCustomerOrders({ email = '', phone = '', no = '' } = {}) {
+  const cleanEmail = (email || '').trim().toLowerCase()
+  const cleanPhone = (phone || '').trim().replace(/\D/g, '')
+  const cleanNo = (no || '').trim().toLowerCase()
+
+  if (!cleanEmail && !cleanPhone && !cleanNo) return []
+
+  const all = getAllOrders()
+  return all.filter(o => {
+    if (cleanNo && (o.no || '').toLowerCase() === cleanNo) return true
+    if (cleanEmail && (o.email || '').trim().toLowerCase() === cleanEmail) return true
+    if (cleanPhone) {
+      const oPhone = (o.phone || '').replace(/\D/g, '')
+      if (oPhone && (oPhone.endsWith(cleanPhone) || cleanPhone.endsWith(oPhone))) return true
+    }
+    return false
+  })
 }
 
 export function getOrderByRazorpayOrderId(razorpayOrderId) {

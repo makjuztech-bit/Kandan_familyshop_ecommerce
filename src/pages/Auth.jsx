@@ -1,42 +1,46 @@
 import { useState, useEffect } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../context/Store'
-import { useOrders, getOrderByNo } from '../data/orders'
+import { useOrders, getOrderByNo, fetchCustomerOrders } from '../data/orders'
 import {
-  changeDemoPassword,
+  changeCustomerPassword,
   getDemoUser,
   isLoggedIn,
-  loginDemoUserByPhone,
-  loginDemoUser,
-  logoutDemoUser,
-  registerDemoUser,
+  loginCustomer,
+  logoutCustomer,
+  registerCustomer,
   resetPasswordRequest,
-  updateDemoProfile,
+  updateCustomerProfile,
   useAuthStatus,
+  verifyCustomerOtp,
+  fetchCustomerProfile,
 } from '../data/auth'
 import { byId, inr, products } from '../data/products'
 import { Wrap, Field, Img, btnP, btnO, validate } from '../components/ui'
-import {CustomerReviews} from '../components/Reviews'
+import { CustomerReviews } from '../components/Reviews'
 import { SHOP } from '../config/shop'
-import {ReviewSummary,ProductSalesSummary} from '../components/Rating'
+import { ReviewSummary, ProductSalesSummary } from '../components/Rating'
 
 export function Login() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState('otp')
-  const [channel, setChannel] = useState('email')
+  const [searchParams] = useSearchParams()
+  const redirect = searchParams.get('redirect') || '/account'
+
+  const [mode, setMode] = useState('otp') // 'otp' | 'password'
+  const [channel, setChannel] = useState('email') // 'email' | 'phone'
   const [destination, setDestination] = useState('')
+  const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [cooldown, setCooldown] = useState(0)
-  const [values, setValues] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
   if (isLoggedIn()) {
-    return <Navigate to="/account" replace />
+    return <Navigate to={redirect} replace />
   }
 
   useEffect(() => {
@@ -46,8 +50,6 @@ export function Login() {
     }, 1000)
     return () => clearInterval(timer)
   }, [cooldown])
-
-  const onChange = (e) => setValues({ ...values, [e.target.name]: e.target.value })
 
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault()
@@ -115,37 +117,8 @@ export function Login() {
     setVerifying(true)
 
     try {
-      const res = await fetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination: destination.trim(), code: cleanOtp }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Verification failed.')
-      }
-
-      if (channel === 'phone') {
-        loginDemoUserByPhone(destination.trim())
-      } else {
-        const currentUser = getDemoUser()
-        saveDemoUser({ ...currentUser, email: destination.trim(), role: 'customer' })
-        localStorage.setItem(
-          'kfs_demo_session',
-          JSON.stringify({
-            loggedIn: true,
-            name: currentUser.name || 'Valued Customer',
-            email: destination.trim(),
-            token: data.token,
-            role: 'customer',
-          })
-        )
-        window.dispatchEvent(new Event('kfs_auth_change'))
-      }
-
-      navigate('/account')
+      await verifyCustomerOtp({ destination: destination.trim(), code: cleanOtp })
+      navigate(redirect, { replace: true })
     } catch (err) {
       setErrors({ otp: err.message || 'Incorrect OTP code.' })
     } finally {
@@ -153,198 +126,245 @@ export function Login() {
     }
   }
 
-  if (mode === 'otp') {
-    return (
-      <Wrap className="py-12">
-        <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-serif font-bold text-primary">Login with OTP</h1>
-          <p className="mt-2 text-sm text-ink/70">
-            Secure, passwordless verification delivered directly to your verified inbox or phone.
-          </p>
-
-          <div className="mt-6 flex rounded-xl border border-gold/40 bg-ivory/60 p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setChannel('email')
-                setOtpSent(false)
-                setMessage('')
-                setSuccessMsg('')
-                setErrors({})
-              }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                channel === 'email' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'
-              }`}
-            >
-              ✉️ Email OTP
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setChannel('phone')
-                setOtpSent(false)
-                setMessage('')
-                setSuccessMsg('')
-                setErrors({})
-              }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                channel === 'phone' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'
-              }`}
-            >
-              📱 Mobile SMS OTP
-            </button>
-          </div>
-
-          <form onSubmit={handleSendOtp} noValidate className="mt-5 space-y-4">
-            <Field
-              label={channel === 'email' ? 'Email address' : 'Mobile number'}
-              id="destination"
-              type={channel === 'email' ? 'email' : 'tel'}
-              inputMode={channel === 'email' ? 'email' : 'numeric'}
-              placeholder={channel === 'email' ? 'you@example.com' : 'e.g. 9876543210'}
-              value={destination}
-              onChange={(e) => {
-                setDestination(e.target.value)
-                setOtpSent(false)
-                setSuccessMsg('')
-                setMessage('')
-                setErrors({})
-              }}
-              error={errors.destination}
-            />
-
-            {!otpSent && (
-              <button
-                type="submit"
-                disabled={sending}
-                className={btnP + ' w-full flex items-center justify-center gap-2'}
-              >
-                {sending ? 'Sending Verification Code…' : `Send ${channel === 'email' ? 'Email' : 'SMS'} OTP`}
-              </button>
-            )}
-          </form>
-
-          {successMsg && (
-            <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs text-emerald-900" role="status">
-              <span className="font-bold">✓ Sent: </span>
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {message && (
-            <div className="mt-4 rounded-xl bg-red-50 border border-red-300 p-3 text-xs text-red-800" role="alert">
-              <span>{message}</span>
-            </div>
-          )}
-
-          {otpSent && (
-            <form onSubmit={handleVerifyOtp} noValidate className="mt-5 space-y-4 pt-4 border-t border-gold/30">
-              <Field
-                label="Enter 6-Digit Verification Code"
-                id="otp"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="••••••"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                error={errors.otp}
-              />
-
-              <div className="flex items-center justify-between text-xs text-ink/70">
-                <span>Valid for 5 minutes</span>
-                {cooldown > 0 ? (
-                  <span className="font-semibold text-primary/70">Resend in {cooldown}s</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={sending}
-                    className="font-bold text-primary underline"
-                  >
-                    Resend Code
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={verifying || otp.length !== 6}
-                className={btnP + ' w-full disabled:opacity-50'}
-              >
-                {verifying ? 'Verifying OTP…' : 'Verify & Sign In'}
-              </button>
-            </form>
-          )}
-
-          <p className="mt-6 text-center text-sm text-ink/70">
-            <button
-              type="button"
-              className="font-bold text-primary underline"
-              onClick={() => {
-                setMode('password')
-                setMessage('')
-                setSuccessMsg('')
-                setErrors({})
-              }}
-            >
-              Sign in with password instead
-            </button>
-          </p>
-          <p className="mt-2 text-center text-sm text-ink/70">
-            New customer?{' '}
-            <Link to="/register" className="font-bold text-primary">
-              Create account
-            </Link>
-          </p>
-        </div>
-      </Wrap>
-    )
-  }
-
-  const submit = e => {
+  const handlePasswordLogin = async (e) => {
     e.preventDefault()
-    const nextErrors = validate(values, ['email'])
-    if (!values.password) {
+    setMessage('')
+    setSuccessMsg('')
+    const target = destination.trim()
+    const nextErrors = {}
+
+    if (!target) {
+      nextErrors.destination = 'Enter your email or mobile number.'
+    }
+    if (!password) {
       nextErrors.password = 'Enter your password.'
     }
-    const result = loginDemoUser(values)
 
-    if (Object.keys(nextErrors).length || !result.ok) {
-      setErrors({ ...nextErrors, email: result.ok ? nextErrors.email : 'Incorrect email or password.' })
-      setMessage(result.message || 'Please check your details.')
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors)
       return
     }
 
-    setMessage('')
-    navigate('/account')
+    setVerifying(true)
+    try {
+      const result = await loginCustomer({ identifier: target, password })
+      if (!result.ok) {
+        setMessage(result.message || 'Incorrect login details.')
+        return
+      }
+      navigate(redirect, { replace: true })
+    } catch (err) {
+      setMessage(err.message || 'Login failed. Please retry.')
+    } finally {
+      setVerifying(false)
+    }
   }
 
   return (
-    <Wrap className="py-12">
-      <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl">Login</h1>
-        <p className="mt-2 text-sm text-ink/70">Welcome back to Sri Kandan Family Shop.</p>
-        <form onSubmit={submit} noValidate className="mt-6 space-y-4">
-          <Field label="Email" id="email" type="email" name="email" value={values.email} onChange={onChange} error={errors.email} />
-          <Field label="Password" id="password" type="password" name="password" value={values.password} onChange={onChange} error={errors.password} />
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" className="h-4 w-4 accent-primary" defaultChecked />
-              Remember me
-            </label>
-            <Link to="/forgot-password" className="font-bold text-primary">Forgot password?</Link>
+    <Wrap className="py-8 md:py-14">
+      <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-gold/40 bg-white shadow-xl flex flex-col md:flex-row min-h-[520px]">
+        {/* Left Flipkart-Style Brand Banner */}
+        <div className="md:w-5/12 flex flex-col justify-between bg-gradient-to-b from-[#4a0e18] via-[#370a12] to-[#1f050a] p-8 text-ivory">
+          <div>
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-2xl font-serif text-gold">❖</span>
+              <span className="font-serif tracking-widest font-bold text-xs text-gold-light uppercase">Sri Kandan Family Shop</span>
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-ivory leading-tight">Login</h1>
+            <p className="mt-4 text-sm leading-relaxed text-ivory/80">
+              Get access to your Orders, Wishlist, Loyalty Rewards and personalized saree recommendations.
+            </p>
           </div>
-          <button className={btnP + ' w-full'}>Login</button>
-          {message && <p role="status" className="rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
-          <p className="text-center text-sm text-ink/70">
-            <button type="button" className="font-bold text-primary" onClick={() => { setMode('otp'); setMessage(''); setErrors({}) }}>Login with mobile OTP</button>
-          </p>
-          <p className="text-center text-sm text-ink/70">
-            New here? <Link to="/register" className="font-bold text-primary">Create account</Link>
-          </p>
-        </form>
+
+          <div className="mt-8 pt-6 border-t border-gold/20">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gold/20 flex items-center justify-center text-gold font-serif text-lg">
+                👑
+              </div>
+              <div>
+                <p className="text-xs text-gold font-semibold uppercase tracking-wider">Heritage Kanchipuram</p>
+                <p className="text-[11px] text-ivory/60">Authentic Handloom Silks</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Interactive Form */}
+        <div className="md:w-7/12 p-6 sm:p-10 flex flex-col justify-between">
+          <div>
+            {/* Mode Selector */}
+            <div className="flex border-b border-gold/30 pb-3 mb-6 justify-between items-center">
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => { setMode('otp'); setMessage(''); setSuccessMsg(''); setErrors({}) }}
+                  className={`pb-1 text-sm font-bold transition-colors ${mode === 'otp' ? 'text-primary border-b-2 border-primary' : 'text-ink/60 hover:text-ink'}`}
+                >
+                  Login with OTP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('password'); setMessage(''); setSuccessMsg(''); setErrors({}) }}
+                  className={`pb-1 text-sm font-bold transition-colors ${mode === 'password' ? 'text-primary border-b-2 border-primary' : 'text-ink/60 hover:text-ink'}`}
+                >
+                  Password Login
+                </button>
+              </div>
+              <span className="text-xs text-gold-dark font-semibold">Fast & Secure</span>
+            </div>
+
+            {/* Error / Success Notifications */}
+            {message && (
+              <div className="mb-4 rounded-xl bg-red-50 border border-red-300 p-3 text-xs text-red-800" role="alert">
+                <span>{message}</span>
+              </div>
+            )}
+            {successMsg && (
+              <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs text-emerald-900" role="status">
+                <span className="font-bold">✓ Sent: </span>
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            {mode === 'otp' ? (
+              <div>
+                {/* Channel Selector */}
+                <div className="mb-5 flex rounded-xl border border-gold/30 bg-ivory/50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => { setChannel('email'); setOtpSent(false); setErrors({}); setMessage(''); setSuccessMsg('') }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${channel === 'email' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'}`}
+                  >
+                    ✉️ Email OTP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setChannel('phone'); setOtpSent(false); setErrors({}); setMessage(''); setSuccessMsg('') }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${channel === 'phone' ? 'bg-primary text-ivory shadow-sm' : 'text-ink/70 hover:text-primary'}`}
+                  >
+                    📱 Mobile SMS OTP
+                  </button>
+                </div>
+
+                <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+                  <Field
+                    label={channel === 'email' ? 'Email Address' : 'Mobile Number'}
+                    id="destination"
+                    type={channel === 'email' ? 'email' : 'tel'}
+                    inputMode={channel === 'email' ? 'email' : 'numeric'}
+                    placeholder={channel === 'email' ? 'Enter your email address' : 'Enter 10-digit mobile number'}
+                    value={destination}
+                    onChange={(e) => {
+                      setDestination(e.target.value)
+                      setOtpSent(false)
+                      setErrors({})
+                      setMessage('')
+                      setSuccessMsg('')
+                    }}
+                    error={errors.destination}
+                  />
+
+                  {!otpSent && (
+                    <button
+                      type="submit"
+                      disabled={sending}
+                      className={btnP + ' w-full py-3 text-sm flex items-center justify-center gap-2'}
+                    >
+                      {sending ? 'Sending Verification Code…' : 'Request OTP'}
+                    </button>
+                  )}
+                </form>
+
+                {otpSent && (
+                  <form onSubmit={handleVerifyOtp} noValidate className="mt-5 space-y-4 pt-4 border-t border-gold/30">
+                    <Field
+                      label="Enter 6-Digit OTP"
+                      id="otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="••••••"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      error={errors.otp}
+                    />
+
+                    <div className="flex items-center justify-between text-xs text-ink/70">
+                      <span>Valid for 5 minutes</span>
+                      {cooldown > 0 ? (
+                        <span className="font-semibold text-primary/70">Resend in {cooldown}s</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleSendOtp}
+                          disabled={sending}
+                          className="font-bold text-primary hover:underline"
+                        >
+                          Resend OTP
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={verifying || otp.length !== 6}
+                      className={btnP + ' w-full py-3 text-sm disabled:opacity-50'}
+                    >
+                      {verifying ? 'Verifying OTP…' : 'Verify & Continue'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              /* Password Login Form */
+              <form onSubmit={handlePasswordLogin} noValidate className="space-y-4">
+                <Field
+                  label="Email or Mobile Number"
+                  id="destination"
+                  type="text"
+                  placeholder="Enter email or 10-digit mobile"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  error={errors.destination}
+                />
+                <Field
+                  label="Password"
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  error={errors.password}
+                />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-ink/60">Registered customer</span>
+                  <Link to="/forgot-password" className="font-bold text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <button
+                  type="submit"
+                  disabled={verifying}
+                  className={btnP + ' w-full py-3 text-sm'}
+                >
+                  {verifying ? 'Logging in…' : 'Sign In'}
+                </button>
+              </form>
+            )}
+
+            <p className="mt-5 text-center text-xs text-ink/50">
+              By continuing, you agree to Sri Kandan Family Shop's Terms of Use and Privacy Policy.
+            </p>
+          </div>
+
+          <div className="mt-6 pt-5 border-t border-gold/20 text-center text-sm text-ink/70">
+            New to Sri Kandan?{' '}
+            <Link to={`/register?redirect=${encodeURIComponent(redirect)}`} className="font-bold text-primary hover:underline">
+              Create an account
+            </Link>
+          </div>
+        </div>
       </div>
     </Wrap>
   )
@@ -352,21 +372,26 @@ export function Login() {
 
 export function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirect = searchParams.get('redirect') || '/account'
+
   const [values, setValues] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
 
   if (isLoggedIn()) {
-    return <Navigate to="/account" replace />
+    return <Navigate to={redirect} replace />
   }
 
-  const onChange = e => setValues({ ...values, [e.target.name]: e.target.value })
-  const submit = e => {
+  const onChange = (e) => setValues({ ...values, [e.target.name]: e.target.value })
+
+  const submit = async (e) => {
     e.preventDefault()
     const nextErrors = validate(values, ['name', 'email', 'phone'])
 
     if (values.password.length < 6) {
-      nextErrors.password = 'Use at least 6 characters.'
+      nextErrors.password = 'Password must have at least 6 characters.'
     }
     if (values.password !== values.confirmPassword) {
       nextErrors.confirmPassword = 'Passwords do not match.'
@@ -378,43 +403,98 @@ export function Register() {
       return
     }
 
-    const result = registerDemoUser({
-      name: values.name,
-      email: values.email,
-      phone: values.phone,
-      password: values.password,
-      address: '22 Silk Lane, Chennai 600001',
-    })
+    setLoading(true)
+    setMessage('')
+    try {
+      const result = await registerCustomer({
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim(),
+        password: values.password,
+      })
 
-    if (!result.ok) {
-      setMessage(result.message)
-      return
+      if (!result.ok) {
+        setMessage(result.message || 'Registration failed.')
+        setLoading(false)
+        return
+      }
+
+      navigate(redirect, { replace: true })
+    } catch (err) {
+      setMessage(err.message || 'Unable to register. Please retry.')
+      setLoading(false)
     }
-
-    navigate('/account')
   }
 
   return (
-    <Wrap className="py-12">
-      <div className="mx-auto max-w-xl rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl">Register</h1>
-        <p className="mt-2 text-sm text-ink/70">Create an account to save favorites, track orders and manage your profile.</p>
-        <form onSubmit={submit} noValidate className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <Field label="Full name" id="name" name="name" value={values.name} onChange={onChange} error={errors.name} />
+    <Wrap className="py-8 md:py-14">
+      <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-gold/40 bg-white shadow-xl flex flex-col md:flex-row min-h-[540px]">
+        {/* Left Flipkart-Style Brand Banner */}
+        <div className="md:w-5/12 flex flex-col justify-between bg-gradient-to-b from-[#4a0e18] via-[#370a12] to-[#1f050a] p-8 text-ivory">
+          <div>
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-2xl font-serif text-gold">❖</span>
+              <span className="font-serif tracking-widest font-bold text-xs text-gold-light uppercase">Sri Kandan Family Shop</span>
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-ivory leading-tight">Looks like you're new here!</h1>
+            <p className="mt-4 text-sm leading-relaxed text-ivory/80">
+              Sign up with your details to start placing orders, save favorites, and track deliveries.
+            </p>
           </div>
-          <Field label="Email" id="email" type="email" name="email" value={values.email} onChange={onChange} error={errors.email} />
-          <Field label="Phone" id="phone" type="tel" name="phone" value={values.phone} onChange={onChange} error={errors.phone} />
-          <Field label="Password" id="password" type="password" name="password" value={values.password} onChange={onChange} error={errors.password} />
-          <Field label="Confirm password" id="confirmPassword" type="password" name="confirmPassword" value={values.confirmPassword} onChange={onChange} error={errors.confirmPassword} />
-          <div className="md:col-span-2">
-            <button className={btnP + ' w-full'}>Create account</button>
+
+          <div className="mt-8 pt-6 border-t border-gold/20">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gold/20 flex items-center justify-center text-gold font-serif text-lg">
+                ✨
+              </div>
+              <div>
+                <p className="text-xs text-gold font-semibold uppercase tracking-wider">Welcome Privileges</p>
+                <p className="text-[11px] text-ivory/60">Loyalty points on every verified order</p>
+              </div>
+            </div>
           </div>
-          {message && <p className="md:col-span-2 rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
-          <p className="md:col-span-2 text-center text-sm text-ink/70">
-            Already have an account? <Link to="/login" className="font-bold text-primary">Log in</Link>
-          </p>
-        </form>
+        </div>
+
+        {/* Right Form */}
+        <div className="md:w-7/12 p-6 sm:p-10 flex flex-col justify-between">
+          <div>
+            <h2 className="text-2xl font-serif font-bold text-ink mb-1">Create Account</h2>
+            <p className="text-xs text-ink/60 mb-6">Enter your details to create your customer account</p>
+
+            {message && (
+              <div className="mb-4 rounded-xl bg-red-50 border border-red-300 p-3 text-xs text-red-800" role="alert">
+                <span>{message}</span>
+              </div>
+            )}
+
+            <form onSubmit={submit} noValidate className="space-y-4">
+              <Field label="Full Name" id="name" name="name" value={values.name} onChange={onChange} error={errors.name} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Email Address" id="email" type="email" name="email" value={values.email} onChange={onChange} error={errors.email} />
+                <Field label="Mobile Number" id="phone" type="tel" name="phone" value={values.phone} onChange={onChange} error={errors.phone} />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Password" id="password" type="password" name="password" value={values.password} onChange={onChange} error={errors.password} />
+                <Field label="Confirm Password" id="confirmPassword" type="password" name="confirmPassword" value={values.confirmPassword} onChange={onChange} error={errors.confirmPassword} />
+              </div>
+
+              <button disabled={loading} className={btnP + ' w-full py-3 text-sm mt-2'}>
+                {loading ? 'Creating Account…' : 'Continue'}
+              </button>
+            </form>
+
+            <p className="mt-4 text-center text-xs text-ink/50">
+              By continuing, you agree to Sri Kandan Family Shop's Terms of Use and Privacy Policy.
+            </p>
+          </div>
+
+          <div className="mt-6 pt-5 border-t border-gold/20 text-center text-sm text-ink/70">
+            Existing customer?{' '}
+            <Link to={`/login?redirect=${encodeURIComponent(redirect)}`} className="font-bold text-primary hover:underline">
+              Log in
+            </Link>
+          </div>
+        </div>
       </div>
     </Wrap>
   )
@@ -423,7 +503,7 @@ export function Register() {
 export function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
-  const submit = e => {
+  const submit = (e) => {
     e.preventDefault()
     const result = resetPasswordRequest(email)
     setMessage(result.message)
@@ -432,14 +512,14 @@ export function ForgotPassword() {
   return (
     <Wrap className="py-12">
       <div className="mx-auto max-w-md rounded-2xl border border-gold/40 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl">Forgot password</h1>
+        <h1 className="text-3xl font-serif font-bold text-primary">Forgot Password</h1>
         <p className="mt-2 text-sm text-ink/70">Enter your email to receive a secure reset link.</p>
         <form onSubmit={submit} noValidate className="mt-6 space-y-4">
-          <Field label="Email" id="reset-email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-          <button className={btnP + ' w-full'}>Send reset link</button>
+          <Field label="Email Address" id="reset-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <button className={btnP + ' w-full py-3 text-sm'}>Send Reset Link</button>
           {message && <p role="status" className="rounded-md bg-gold/15 p-3 text-sm text-ink/80">{message}</p>}
           <p className="text-center text-sm text-ink/70">
-            Back to <Link to="/login" className="font-bold text-primary">login</Link>
+            Back to <Link to="/login" className="font-bold text-primary hover:underline">login</Link>
           </p>
         </form>
       </div>
@@ -448,51 +528,86 @@ export function ForgotPassword() {
 }
 
 export function Account() {
+  const navigate = useNavigate()
   const { wish, toggleWish } = useStore()
   const orders = useOrders()
   const session = useAuthStatus()
+  const demoUser = getDemoUser() || {}
   const [tab, setTab] = useState('profile')
-  const user = getDemoUser()
-  const myOrders=orders.filter(order=>(order.email||'').toLowerCase()===(session?.email||'').toLowerCase())
-  const [profile, setProfile] = useState({ name: user.name, email: user.email, phone: user.phone, address: user.address })
-  const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [status, setStatus] = useState('')
 
   if (!session || !session.loggedIn) {
     return <Navigate to="/login" replace />
   }
 
-  const saveProfile = e => {
+  const user = { ...demoUser, ...(session || {}) }
+  const userEmail = (session?.email || user.email || '').trim().toLowerCase()
+  const userPhone = (session?.phone || user.phone || '').replace(/\D/g, '')
+
+  // Sync latest customer profile and customer orders from backend
+  useEffect(() => {
+    fetchCustomerProfile().catch(() => {})
+    if (userEmail || userPhone) {
+      fetchCustomerOrders({ email: userEmail, phone: userPhone }).catch(() => {})
+    }
+  }, [userEmail, userPhone])
+
+  const myOrders = orders.filter((order) => {
+    const oEmail = (order.email || '').trim().toLowerCase()
+    const oPhone = (order.phone || '').replace(/\D/g, '')
+    if (userEmail && oEmail && oEmail === userEmail) return true
+    if (userPhone && oPhone && (oPhone.endsWith(userPhone) || userPhone.endsWith(oPhone))) return true
+    return false
+  })
+
+  const [profile, setProfile] = useState({
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    address: user.address || '',
+  })
+
+  const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+
+  const saveProfile = async (e) => {
     e.preventDefault()
-    const result = updateDemoProfile(profile)
-    setStatus(result.ok ? 'Profile updated.' : result.message)
+    const result = await updateCustomerProfile(profile)
+    setStatus(result.ok ? 'Profile updated successfully.' : (result.message || 'Could not update profile.'))
   }
 
-  const savePassword = e => {
+  const savePassword = async (e) => {
     e.preventDefault()
     if (passwords.newPassword !== passwords.confirmPassword) {
       setStatus('New passwords do not match.')
       return
     }
-    const result = changeDemoPassword(passwords.currentPassword, passwords.newPassword)
-    setStatus(result.ok ? 'Password updated successfully.' : result.message)
+    const result = await changeCustomerPassword(passwords.currentPassword, passwords.newPassword)
+    setStatus(result.ok ? 'Password updated successfully.' : (result.message || 'Could not update password.'))
   }
 
-  const wishlistItems = wish.map(id => byId[id]).filter(Boolean)
+  const wishlistItems = wish.map((id) => byId[id]).filter(Boolean)
   const tabs = ['profile', 'orders', 'loyalty', 'wishlist', 'reviews', 'security']
 
   return (
     <Wrap className="py-10">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-primary">My account</p>
-          <h1 className="text-4xl">Hello, {session.name}</h1>
+          <p className="text-sm uppercase tracking-[0.2em] text-primary">My Account</p>
+          <h1 className="text-4xl font-serif font-bold text-ink">Hello, {session.name || user.name || 'Customer'}</h1>
         </div>
-        <button className={btnO} onClick={() => logoutDemoUser()}>Logout</button>
+        <button
+          className={btnO}
+          onClick={async () => {
+            await logoutCustomer()
+            navigate('/login')
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {tabs.map(key => (
+        {tabs.map((key) => (
           <button
             key={key}
             type="button"
@@ -527,27 +642,34 @@ export function Account() {
         <div className="space-y-4">
           {myOrders.length === 0 ? (
             <div className="rounded-2xl border border-gold/40 bg-white p-8 text-center text-ink/70">
-              You have not placed any orders yet.
+              <p>You have not placed any orders yet.</p>
+              <Link to="/orders" className="mt-3 inline-block font-bold text-primary underline">
+                Track or look up an order by Order ID →
+              </Link>
             </div>
           ) : (
-            myOrders.map(order => (
-              <div key={order.no} className="rounded-2xl border border-gold/40 bg-white p-5">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="font-bold">{order.no}</p>
-                    <p className="text-sm text-ink/70">{order.at}</p>
+            myOrders.map(order => {
+              const orderItems = Array.isArray(order.items) ? order.items : []
+              return (
+                <div key={order.no} className="rounded-2xl border border-gold/40 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-bold text-ink">{order.no}</p>
+                      <p className="text-sm text-ink/70">{order.at || order.createdAt}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-bold text-ink">{order.status || 'New'}</span>
+                      <Link to={'/order/' + order.no} className="font-bold text-primary hover:underline">View details</Link>
+                      <Link to={'/delivery?order=' + order.no} className="text-xs font-semibold text-ink/70 hover:text-primary">Track</Link>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-bold">{order.status || 'New'}</span>
-                    <Link to={'/order/' + order.no} className="font-bold text-primary">View details</Link>
+                  <div className="mt-4 flex items-center justify-between text-sm text-ink/70">
+                    <span>{orderItems.length} item(s) · Payment <span className="capitalize">{order.paymentStatus || 'unpaid'}</span> ({order.paymentMethod || 'COD'})</span>
+                    <span className="font-bold text-primary text-base">{inr(order.total || 0)}</span>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between text-sm text-ink/70">
-                  <span>{(order.items||[]).length} item(s) · Payment {order.paymentStatus||'unpaid'}</span>
-                  <span className="font-bold text-primary">{inr(order.total || 0)}</span>
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
@@ -601,15 +723,12 @@ export function Account() {
 export function OrderDetails() {
   const { orderId } = useParams()
   const orders = useOrders()
-  const session = useAuthStatus()
   const [fetchedOrder, setFetchedOrder] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const normalizedOrderId = (orderId || '').trim().toLowerCase()
-  const localOrder = orders.find(item =>
-    (item.no || '').trim().toLowerCase() === normalizedOrderId &&
-    (!session?.email || (item.email || '').toLowerCase() === (session.email || '').toLowerCase())
-  )
+  const localOrder = orders.find(item => (item.no || '').trim().toLowerCase() === normalizedOrderId)
 
   useEffect(() => {
     let active = true
@@ -621,31 +740,38 @@ export function OrderDetails() {
 
     if (orderId) {
       setLoading(true)
-      getOrderByNo(orderId).then((ord) => {
-        if (!active) return
-        if (ord && (!session?.email || (ord.email || '').toLowerCase() === (session.email || '').toLowerCase())) {
-          setFetchedOrder(ord)
-        }
-        setLoading(false)
-      }).catch(() => {
-        if (active) setLoading(false)
-      })
+      setErrorMsg('')
+      getOrderByNo(orderId)
+        .then((ord) => {
+          if (!active) return
+          if (ord) {
+            setFetchedOrder(ord)
+          } else {
+            setErrorMsg('Order not found')
+          }
+          setLoading(false)
+        })
+        .catch((err) => {
+          if (active) {
+            setErrorMsg(err.message || 'Unable to retrieve order details')
+            setLoading(false)
+          }
+        })
     } else {
       setLoading(false)
     }
 
     return () => { active = false }
-  }, [orderId, localOrder, session?.email])
+  }, [orderId, localOrder])
 
   const order = fetchedOrder || localOrder
-
-  if (!session?.loggedIn) return <Navigate to="/login" replace />
 
   if (loading) {
     return (
       <Wrap className="py-20 text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-3" />
-        <p className="text-sm font-semibold text-ink/70">Loading order details #{orderId}…</p>
+        <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent mb-3" />
+        <h2 className="text-xl font-serif font-bold text-ink">Loading Order Details</h2>
+        <p className="mt-1 text-sm font-medium text-ink/70">Retrieving order #{orderId}…</p>
       </Wrap>
     )
   }
@@ -653,65 +779,201 @@ export function OrderDetails() {
   if (!order) {
     return (
       <Wrap className="py-16 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-3xl">📦</div>
-        <h1 className="text-2xl font-serif font-bold text-primary">Order Not Found</h1>
-        <p className="mt-2 text-sm text-ink/60">We could not find order #{orderId} associated with your account.</p>
-        <div className="mt-6 flex justify-center gap-3">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gold/15 text-4xl">📦</div>
+        <h1 className="text-3xl font-serif font-bold text-primary">Order Not Found</h1>
+        <p className="mt-2 text-sm text-ink/70 max-w-md mx-auto">
+          We could not find order #{orderId}. Please verify your order number or check delivery tracking.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link to="/orders" className={btnP}>My Orders</Link>
           <Link to="/delivery" className={btnO}>Delivery Tracking</Link>
+          <Link to="/shop" className={btnO}>Browse Collection</Link>
         </div>
       </Wrap>
     )
   }
 
-  const items=(order.items||[]).map(item=>({...item,product:byId[item.productId]||products.find(product=>product.name===item.name)}))
-  const status=order.status||'New'
-  const paymentStatus=String(order.paymentStatus||'unpaid').toLowerCase()
-  const placed=order.createdAt?new Date(order.createdAt):new Date(order.at)
-  const orderDate=Number.isNaN(placed.getTime())?order.at:placed.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})
-  const steps=['New','Packed','Delivered']
-  const stepIndex=steps.indexOf(status)
+  const rawItems = Array.isArray(order.items)
+    ? order.items
+    : typeof order.items === 'string'
+    ? (() => { try { return JSON.parse(order.items) } catch { return [] } })()
+    : []
+
+  const items = rawItems.map(item => {
+    const product = item.product || byId[item.productId] || products.find(p => p.id === item.productId || p.name === item.name)
+    const fallbackImage = (Array.isArray(product?.images) && product.images[0]) || '/images/hero-silk-showroom.jpg'
+    return {
+      ...item,
+      product,
+      name: item.name || product?.name || 'Handloom Silk Saree',
+      q: Number(item.q || item.quantity || 1),
+      price: Number(item.price || product?.price || 0),
+      image: item.image || fallbackImage,
+      productId: item.productId || product?.id || '',
+      sku: item.sku || product?.sku || '—',
+      collection: item.category || product?.collection || '',
+    }
+  })
+
+  const status = order.status || order.orderStatus || 'Confirmed'
+  const paymentStatus = String(order.paymentStatus || 'unpaid').toLowerCase()
+  const isPaid = paymentStatus === 'paid'
+  const isRazorpay = String(order.paymentMethod || '').toLowerCase().includes('razorpay')
+  const placed = order.createdAt ? new Date(order.createdAt) : new Date(order.at)
+  const orderDate = Number.isNaN(placed.getTime()) ? (order.at || order.createdAt) : placed.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+  const steps = ['Confirmed', 'Processing', 'Packed', 'Delivered']
+  const stepIndex = steps.indexOf(status) >= 0 ? steps.indexOf(status) : 0
+
   return (
     <Wrap className="py-10">
+      {/* Top Banner */}
       <div className="mb-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><p className="text-sm uppercase tracking-[0.2em] text-primary">My order</p><h1 className="mt-1 text-3xl sm:text-4xl">#{order.no}</h1><p className="mt-2 text-sm text-ink/60">Placed on {orderDate}</p></div>
-          <Link to="/account" className={btnO}>Back to my orders</Link>
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-primary">Order Summary</p>
+            <h1 className="mt-1 text-3xl font-serif font-bold text-ink sm:text-4xl">#{order.no}</h1>
+            <p className="mt-2 text-sm text-ink/60">Placed on {orderDate}</p>
+          </div>
+          <div className="flex gap-2">
+            <Link to="/orders" className={btnO}>← All Orders</Link>
+            <Link to={`/delivery?order=${order.no}`} className={btnP}>Track Live Delivery</Link>
+          </div>
         </div>
+
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Order status</p><p className="mt-1 font-bold text-primary">{status}</p></div>
-          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Payment</p><p className="mt-1 font-bold capitalize">{paymentStatus}</p></div>
-          <div className="rounded-xl bg-ivory/70 p-4"><p className="text-xs uppercase tracking-wide text-ink/60">Delivery</p><p className="mt-1 font-bold">{status==='Delivered'?'Delivered':status==='Cancelled'?'Cancelled':'In progress'}</p></div>
+          <div className="rounded-xl bg-ivory/70 p-4 border border-gold/15">
+            <p className="text-xs uppercase tracking-wide text-ink/60 font-semibold">Order status</p>
+            <p className="mt-1 font-bold text-primary text-base">{status}</p>
+          </div>
+          <div className="rounded-xl bg-ivory/70 p-4 border border-gold/15">
+            <p className="text-xs uppercase tracking-wide text-ink/60 font-semibold">Payment</p>
+            <p className={`mt-1 font-bold capitalize text-base ${isPaid ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {paymentStatus} ({order.paymentMethod || 'COD'})
+            </p>
+          </div>
+          <div className="rounded-xl bg-ivory/70 p-4 border border-gold/15">
+            <p className="text-xs uppercase tracking-wide text-ink/60 font-semibold">Delivery</p>
+            <p className="mt-1 font-bold text-ink text-base">
+              {status === 'Delivered' ? 'Delivered' : status === 'Cancelled' ? 'Cancelled' : 'In progress'}
+            </p>
+          </div>
         </div>
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,.8fr)]">
+        {/* Products section */}
         <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-2xl">Purchased products</h2><p className="mt-1 text-sm text-ink/60">{items.length} item(s)</p></div><p className="font-serif text-2xl font-bold text-primary">{inr(order.total||0)}</p></div>
-          <ul className="space-y-4">{items.map((item,index)=>{
-            const product=item.product,productId=item.productId||product?.id
-            return <li key={`${productId||item.name}-${index}`} className="rounded-xl border border-gold/20 p-4">
-              <div className="flex gap-4">
-                <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark">{product?<Img src={item.image||product.images[0]} alt={item.name} tone={product.hex} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-xs">Product photo</div>}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold">{item.name}</p><p className="mt-1 text-xs text-ink/60">SKU {item.sku||productId||'—'}{(item.category||product?.collection)&&` · ${item.category||product.collection}`}</p>
-                  <p className="mt-2 text-sm">Qty {item.q||1} × {inr(item.price||0)}</p><p className="mt-1 font-bold text-primary">{inr((item.price||0)*(item.q||1))}</p>
-                  {productId&&<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2"><ReviewSummary productId={productId}/><ProductSalesSummary productId={productId}/></div>}
-                </div>
-              </div>
-              {status==='Delivered'&&productId&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-ivory/70 p-3"><div><p className="font-bold">How was your product?</p><p className="text-xs text-ink/60">Share your feedback; reviews appear after shop moderation.</p></div><Link to={`/product/${productId}?review=1#product-reviews-heading`} className={btnO}>Rate this product</Link></div>}
-            </li>
-          })}</ul>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2 border-b border-gold/20 pb-3">
+            <div>
+              <h2 className="text-2xl font-serif font-bold text-ink">Purchased Products</h2>
+              <p className="mt-1 text-sm text-ink/60">{items.length} item(s)</p>
+            </div>
+            <p className="font-serif text-3xl font-bold text-primary">{inr(order.total || 0)}</p>
+          </div>
+
+          <ul className="space-y-4">
+            {items.map((item, index) => {
+              const product = item.product
+              const productId = item.productId || product?.id
+              return (
+                <li key={`${productId || item.name}-${index}`} className="rounded-xl border border-gold/20 p-4 bg-ivory/20">
+                  <div className="flex gap-4">
+                    <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-ivory-dark border border-gold/20">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = '/images/hero-silk-showroom.jpg'
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-base text-ink">{item.name}</p>
+                      <p className="mt-1 text-xs text-ink/60">
+                        SKU: {item.sku} {item.collection ? `· ${item.collection}` : ''}
+                      </p>
+                      <p className="mt-2 text-sm text-ink/80">
+                        Qty {item.q} × {inr(item.price)}
+                      </p>
+                      <p className="mt-1 font-bold text-primary text-base">
+                        {inr(item.price * item.q)}
+                      </p>
+                      {productId && (
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                          <ReviewSummary productId={productId} />
+                          <ProductSalesSummary productId={productId} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {status === 'Delivered' && productId && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-ivory/70 p-3 border border-gold/20">
+                      <div>
+                        <p className="font-bold text-sm text-ink">How was your product?</p>
+                        <p className="text-xs text-ink/60">Share your feedback; verified reviews appear after moderation.</p>
+                      </div>
+                      <Link to={`/product/${productId}?review=1#product-reviews-heading`} className={btnO + ' text-xs'}>
+                        Rate this product
+                      </Link>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </section>
 
+        {/* Sidebar: Delivery & Payment Details */}
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm"><h2 className="text-xl">Delivery details</h2><p className="mt-3 font-bold">{order.name}</p><p className="mt-1 text-sm text-ink/70">{order.address}</p><p className="mt-2 text-sm text-ink/70">{order.phone}</p><p className="break-all text-sm text-ink/70">{order.email}</p></section>
           <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
-            <h2 className="text-xl">Payment summary</h2>
-            <div className="mt-3 flex justify-between gap-3 text-sm"><span>Payment method</span><span className="text-right font-medium">{order.paymentMethod||'Not recorded'}</span></div>
-            <div className="mt-2 flex justify-between gap-3 text-sm"><span>Payment status</span><span className={`capitalize font-bold text-xs px-2 py-0.5 rounded ${paymentStatus==='paid'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{paymentStatus}</span></div>
-            <div className="mt-3 flex justify-between border-t border-gold/20 pt-3 font-bold"><span>Order total</span><span className="text-primary">{inr(order.total||0)}</span></div>
-            {paymentStatus !== 'paid' && String(order.paymentMethod).toLowerCase().includes('razorpay') && (
+            <h2 className="text-xl font-serif font-bold text-ink">Delivery details</h2>
+            <div className="mt-3 space-y-1 text-sm text-ink/80">
+              <p className="font-bold text-base text-ink">{order.name || order.customerName}</p>
+              <p className="mt-1">{order.address}</p>
+              {order.phone && <p className="mt-1 font-medium text-ink">📞 {order.phone}</p>}
+              {order.email && <p className="break-all text-ink/70">✉ {order.email}</p>}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-serif font-bold text-ink">Payment summary</h2>
+            <div className="mt-3 space-y-2 text-sm text-ink/80">
+              <div className="flex justify-between gap-3">
+                <span>Payment method</span>
+                <span className="font-medium text-ink">{order.paymentMethod || 'COD'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Payment status</span>
+                <span className={`capitalize font-bold text-xs px-2.5 py-0.5 rounded ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {paymentStatus}
+                </span>
+              </div>
+              {order.paymentId && (
+                <div className="flex justify-between gap-3 text-xs text-ink/60">
+                  <span>Transaction ID</span>
+                  <span className="font-mono">{order.paymentId}</span>
+                </div>
+              )}
+              {order.subtotal > 0 && order.subtotal !== order.total && (
+                <div className="flex justify-between gap-3">
+                  <span>Subtotal</span>
+                  <span>{inr(order.subtotal)}</span>
+                </div>
+              )}
+              {order.discount > 0 && (
+                <div className="flex justify-between gap-3 text-emerald-700">
+                  <span>Discount</span>
+                  <span>-{inr(order.discount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-gold/20 pt-3 font-bold text-base">
+                <span>Order total</span>
+                <span className="text-primary font-serif text-xl">{inr(order.total || 0)}</span>
+              </div>
+            </div>
+
+            {!isPaid && isRazorpay && (
               <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/70 p-3 text-center">
                 <p className="text-xs font-bold text-emerald-800">Payment Pending via Razorpay</p>
                 <a
@@ -720,20 +982,44 @@ export function OrderDetails() {
                   rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-4 py-2 text-xs font-bold text-white transition-colors shadow-sm"
                 >
-                  <span>Pay {inr(order.total||0)} on Razorpay</span>
+                  <span>Pay {inr(order.total || 0)} on Razorpay</span>
                   <span>↗</span>
                 </a>
-                <p className="mt-1.5 text-[11px] text-emerald-700">Please enter Order #{order.no} in payment comment</p>
+                <p className="mt-1.5 text-[11px] text-emerald-700">Please enter Order #{order.no} in payment note</p>
               </div>
             )}
-            <p className="mt-3 text-xs text-ink/60">Payment is processed securely through our payment gateway.</p>
+            <p className="mt-3 text-xs text-ink/60">Payment is processed securely through our verified payment gateway.</p>
           </section>
         </aside>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm">
-        <h2 className="text-xl">Order progress</h2>
-        {status==='Cancelled'||status==='Refunded'?<p className="mt-3 rounded-lg bg-red-50 p-3 font-bold text-red-800">{status}</p>:<div className="mt-4 grid gap-3 sm:grid-cols-3">{steps.map((step,index)=><div key={step} className="flex items-center gap-3"><span className={'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold '+(index<=stepIndex?'bg-primary text-ivory':'bg-gold/20 text-primary')}>{index<=stepIndex?'✓':index+1}</span><span className={index<=stepIndex?'font-bold':'text-ink/60'}>{step}</span></div>)}</div>}
+      {/* Progress tracker */}
+      <div className="mt-6 rounded-2xl border border-gold/30 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-xl font-serif font-bold text-ink">Order progress</h2>
+        {status === 'Cancelled' || status === 'Refunded' ? (
+          <p className="mt-3 rounded-lg bg-red-50 p-3 font-bold text-red-800">
+            ⚠️ This order has been {status.toLowerCase()}.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            {steps.map((step, index) => {
+              const isDone = index <= stepIndex
+              return (
+                <div key={step} className="flex items-center gap-3 rounded-xl border border-gold/20 bg-ivory/30 p-3">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${isDone ? 'bg-primary text-ivory ring-2 ring-gold' : 'bg-gold/20 text-primary'}`}>
+                    {isDone ? '✓' : index + 1}
+                  </span>
+                  <div>
+                    <p className={`text-xs uppercase tracking-wider font-semibold ${isDone ? 'text-primary' : 'text-ink/50'}`}>
+                      Step {index + 1}
+                    </p>
+                    <p className={`text-sm ${isDone ? 'font-bold text-ink' : 'text-ink/60'}`}>{step}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Wrap>
   )
